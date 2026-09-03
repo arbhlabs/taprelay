@@ -8,6 +8,8 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 -keep,includedescriptorclasses class com.arbhlabs.taprelay.**$$serializer { *; }
+-keep class com.arbhlabs.taprelay.data.remote.tuya.** { *; }
+-keep class com.arbhlabs.taprelay.data.remote.govee.** { *; }
 
 # Ktor
 -keep class io.ktor.** { *; }

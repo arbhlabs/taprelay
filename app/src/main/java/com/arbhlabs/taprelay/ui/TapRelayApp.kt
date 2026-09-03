@@ -18,12 +18,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Power
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +44,9 @@ import androidx.compose.ui.unit.dp
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.ActionType
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
+import com.arbhlabs.taprelay.domain.model.DiscoveredScene
+import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
+import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
 
 val ICONS: Map<String, ImageVector> = mapOf(
@@ -48,6 +54,7 @@ val ICONS: Map<String, ImageVector> = mapOf(
     "room" to Icons.Default.Weekend,
     "plug" to Icons.Default.Power,
     "switch" to Icons.Default.Bolt,
+    "scene" to Icons.Default.AutoAwesome
 )
 
 fun iconFor(key: String) = ICONS[key] ?: Icons.Default.Lightbulb
@@ -61,6 +68,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
     val nfcReady by vm.nfcReady.collectAsState()
 
     var startedOnboarding by rememberSaveable { mutableStateOf(false) }
+    var showConnections by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -68,9 +76,28 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                 OnboardingScreen(onGetStarted = { startedOnboarding = true })
 
             !ui.onboardingComplete ->
-                ConnectScreen(vm, onDone = { vm.completeOnboarding() })
+                ConnectionsScreen(
+                    vm = vm,
+                    isOnboarding = true,
+                    onDone = { vm.completeOnboarding() }
+                )
 
-            else -> HomeScreen(vm, ui.tags, ui.goveeConnected, nfcReady)
+            showConnections ->
+                ConnectionsScreen(
+                    vm = vm,
+                    isOnboarding = false,
+                    onDone = { showConnections = false }
+                )
+
+            else ->
+                HomeScreen(
+                    vm = vm,
+                    tags = ui.tags,
+                    goveeConnected = ui.goveeConnected,
+                    tuyaConnected = ui.tuyaConnected,
+                    nfcReady = nfcReady,
+                    onOpenConnections = { showConnections = true }
+                )
         }
 
         if (wizard.active) {
@@ -136,67 +163,240 @@ private fun OnboardingScreen(onGetStarted: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConnectScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
+private fun ConnectionsScreen(
+    vm: TapRelayViewModel,
+    isOnboarding: Boolean,
+    onDone: () -> Unit
+) {
+    val ui by vm.ui.collectAsState()
     val state by vm.connectState.collectAsState()
-    var key by rememberSaveable { mutableStateOf("") }
 
-    LaunchedEffect(state) {
-        if (state is TapRelayViewModel.ConnectState.Success) onDone()
-    }
+    var goveeKey by rememberSaveable { mutableStateOf("") }
+    var tuyaAccessId by rememberSaveable { mutableStateOf("") }
+    var tuyaSecret by rememberSaveable { mutableStateOf("") }
+    var tuyaRegion by rememberSaveable { mutableStateOf("us") }
+    var tuyaUid by rememberSaveable { mutableStateOf("") }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Connect Govee") }) }) { pad ->
+    var showGoogleInfo by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (isOnboarding) "Connect Smart Home" else "Connections") },
+                navigationIcon = {
+                    if (!isOnboarding) {
+                        IconButton(onClick = onDone) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { vm.refreshConnections() }) {
+                        Icon(Icons.Default.Refresh, "Refresh")
+                    }
+                }
+            )
+        }
+    ) { pad ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text("Private alpha", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(
-                "TapRelay controls your Govee lights using a personal key from the Govee Home app. " +
-                    "Open the Govee Home app, go to Profile → Settings → Apply for API Key, then paste the key it emails you below.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            OutlinedTextField(
-                value = key,
-                onValueChange = { key = it; vm.resetConnectState() },
-                label = { Text("Govee key") },
-                singleLine = true,
+            Text("Providers", style = MaterialTheme.typography.titleMedium)
+
+            // --- GOVEE CARD ---
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Govee", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (ui.goveeConnected) "Connected • ${ui.goveeDeviceCount} devices" else "Not connected",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (ui.goveeConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        if (ui.goveeConnected) {
+                            FilledTonalButton(onClick = { vm.disconnectGovee() }) { Text("Disconnect") }
+                        }
+                    }
+
+                    if (!ui.goveeConnected) {
+                        Text(
+                            "Get your personal API key from Govee Home: Profile → Settings → Apply for API Key.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = goveeKey,
+                            onValueChange = { goveeKey = it; vm.resetConnectState() },
+                            label = { Text("Govee API Key") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Button(
+                            onClick = { vm.connectGovee(goveeKey) },
+                            enabled = state !is TapRelayViewModel.ConnectState.Validating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (state is TapRelayViewModel.ConnectState.Validating) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Connect Govee")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- SMART LIFE / TUYA CARD ---
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Smart Life / Tuya", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            val statusText = if (ui.tuyaConnected) {
+                                "Connected • ${ui.tuyaDeviceCount} devices • ${ui.tuyaSceneCount} scenes"
+                            } else "Not connected"
+                            Text(
+                                statusText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (ui.tuyaConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        if (ui.tuyaConnected) {
+                            FilledTonalButton(onClick = { vm.disconnectTuya() }) { Text("Disconnect") }
+                        }
+                    }
+
+                    if (!ui.tuyaConnected) {
+                        Text(
+                            "Link your Smart Life or Tuya app to a Cloud project at iot.tuya.com and enter your credentials.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        OutlinedTextField(
+                            value = tuyaAccessId,
+                            onValueChange = { tuyaAccessId = it; vm.resetConnectState() },
+                            label = { Text("Access ID / Client ID") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = tuyaSecret,
+                            onValueChange = { tuyaSecret = it; vm.resetConnectState() },
+                            label = { Text("Access Secret") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = tuyaUid,
+                            onValueChange = { tuyaUid = it; vm.resetConnectState() },
+                            label = { Text("User ID / UID (optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Region:", style = MaterialTheme.typography.bodySmall)
+                            listOf("us", "eu", "cn").forEach { r ->
+                                FilterChip(
+                                    selected = tuyaRegion == r,
+                                    onClick = { tuyaRegion = r },
+                                    label = { Text(r.uppercase()) }
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                vm.connectTuya(
+                                    accessId = tuyaAccessId,
+                                    secret = tuyaSecret,
+                                    region = tuyaRegion,
+                                    uid = tuyaUid
+                                )
+                            },
+                            enabled = state !is TapRelayViewModel.ConnectState.Validating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (state is TapRelayViewModel.ConnectState.Validating) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Connect Smart Life")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- GOOGLE HOME CARD ---
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Google Home", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Unavailable in this build", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { showGoogleInfo = true }) { Text("Learn why") }
+                }
+            }
+
             (state as? TapRelayViewModel.ConnectState.Error)?.let {
                 Text(it.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+
+            Spacer(Modifier.height(16.dp))
             Button(
-                onClick = { vm.connectGovee(key) },
-                enabled = state !is TapRelayViewModel.ConnectState.Validating,
+                onClick = onDone,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                if (state is TapRelayViewModel.ConnectState.Validating)
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                else Text("Connect")
+                Text(if (isOnboarding) "Continue to TapRelay" else "Done")
             }
-            Text(
-                "Govee's developer API is for personal, non-commercial use. TapRelay is a private alpha " +
-                    "and isn't affiliated with or endorsed by Govee.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            HorizontalDivider()
-            Text("Google Home", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "Google Home support needs provider access from Google and isn't enabled in this private alpha.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
+    }
+
+    if (showGoogleInfo) {
+        AlertDialog(
+            onDismissRequest = { showGoogleInfo = false },
+            confirmButton = { TextButton(onClick = { showGoogleInfo = false }) { Text("OK") } },
+            title = { Text("Google Home API") },
+            text = {
+                Text(
+                    "Google Home programmatic automation triggering requires enterprise partner access from Google. " +
+                        "TapRelay maintains a standards-compliant provider abstraction ready for when Google opens direct client access."
+                )
+            }
+        )
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnected: Boolean, nfcReady: Boolean) {
+private fun HomeScreen(
+    vm: TapRelayViewModel,
+    tags: List<TagEntity>,
+    goveeConnected: Boolean,
+    tuyaConnected: Boolean,
+    nfcReady: Boolean,
+    onOpenConnections: () -> Unit
+) {
     var detail by remember { mutableStateOf<TagEntity?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+
+    val anyConnected = goveeConnected || tuyaConnected
 
     Scaffold(
         topBar = {
@@ -204,12 +404,22 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                 title = { Text("TapRelay") },
                 actions = {
                     AssistChip(
-                        onClick = {},
-                        label = { Text(if (goveeConnected) "Govee connected" else "Not connected") },
+                        onClick = onOpenConnections,
+                        label = {
+                            Text(
+                                if (anyConnected) {
+                                    val parts = mutableListOf<String>()
+                                    if (goveeConnected) parts.add("Govee")
+                                    if (tuyaConnected) parts.add("Smart Life")
+                                    parts.joinToString(" + ")
+                                } else "Not connected"
+                            )
+                        },
                         leadingIcon = {
                             Icon(
-                                Icons.Default.CheckCircle, null,
-                                tint = if (goveeConnected) MaterialTheme.colorScheme.primary
+                                if (anyConnected) Icons.Default.CheckCircle else Icons.Default.Hub,
+                                null,
+                                tint = if (anyConnected) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.outline
                             )
                         }
@@ -219,12 +429,12 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
+                            text = { Text("Connections") },
+                            onClick = { menuOpen = false; onOpenConnections() }
+                        )
+                        DropdownMenuItem(
                             text = { Text("About TapRelay") },
                             onClick = { menuOpen = false; showAbout = true }
-                        )
-                        if (goveeConnected) DropdownMenuItem(
-                            text = { Text("Disconnect Govee") },
-                            onClick = { menuOpen = false; vm.disconnectGovee() }
                         )
                     }
                 }
@@ -249,7 +459,7 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                 Text("No tags yet", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Add a sticker and turn it into a physical smart-home button.",
+                    "Add an NFC sticker and turn it into a physical smart-home button.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -281,8 +491,10 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
+                                val providerLabel = if (tag.providerId == TUYA_PROVIDER_ID) "Smart Life" else "Govee"
+                                val actLabel = actionLabel(tag.actionType)
                                 Text(
-                                    actionLabel(tag.actionType) + if (!tag.enabled) " • off" else "",
+                                    "$providerLabel • $actLabel" + if (!tag.enabled) " • off" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -347,11 +559,11 @@ private fun TagDetailSheet(
             }
             Text(
                 "Currently ${actionLabel(tag.actionType).lowercase()} on “${tag.friendlyName}”. " +
-                    "Changing the device or action does not require re-tapping the sticker.",
+                    "Changing the device, scene, or action does not require re-tapping the sticker.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedButton(onClick = onChangeMapping, Modifier.fillMaxWidth()) { Text("Change device or action") }
+            OutlinedButton(onClick = onChangeMapping, Modifier.fillMaxWidth()) { Text("Change device, scene, or action") }
             OutlinedButton(onClick = onTest, Modifier.fillMaxWidth()) { Text("Test action") }
             if (!confirmDelete) {
                 TextButton(onClick = { confirmDelete = true }, Modifier.fillMaxWidth()) {
@@ -373,6 +585,7 @@ private fun TagDetailSheet(
 @Composable
 private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
     val w by vm.wizard.collectAsState()
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Devices, 1 = Scenes
 
     Scaffold(topBar = {
         TopAppBar(
@@ -392,27 +605,85 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                 WizardStep.SCAN -> ScanStep(w, vm, nfcReady)
 
                 WizardStep.PICK_DEVICE -> {
-                    Text("Choose a device", style = MaterialTheme.typography.titleMedium)
+                    Text("What should this tag control?", style = MaterialTheme.typography.titleMedium)
+
                     if (w.discovering) {
-                        CircularProgressIndicator()
+                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     } else if (w.error != null) {
                         Text(w.error!!, color = MaterialTheme.colorScheme.error)
                         Button(onClick = { vm.retryDiscovery() }) { Text("Try again") }
-                    } else if (w.devices.isEmpty()) {
-                        Text("No controllable lights found on your Govee account.")
+                    } else if (w.devices.isEmpty() && w.scenes.isEmpty()) {
+                        Text("No controllable devices or scenes found. Check your connections in Settings.")
                         Button(onClick = { vm.retryDiscovery() }) { Text("Refresh") }
                     } else {
-                        w.devices.forEach { d ->
-                            ElevatedCard(onClick = { vm.selectDevice(d) }, modifier = Modifier.fillMaxWidth()) {
-                                Text(d.name, Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                        if (w.scenes.isNotEmpty()) {
+                            TabRow(selectedTabIndex = selectedTab) {
+                                Tab(
+                                    selected = selectedTab == 0,
+                                    onClick = { selectedTab = 0 },
+                                    text = { Text("DEVICES (${w.devices.size})") }
+                                )
+                                Tab(
+                                    selected = selectedTab == 1,
+                                    onClick = { selectedTab = 1 },
+                                    text = { Text("SCENES (${w.scenes.size})") }
+                                )
+                            }
+                        }
+
+                        if (selectedTab == 0 || w.scenes.isEmpty()) {
+                            w.devices.forEach { d ->
+                                ElevatedCard(
+                                    onClick = { vm.selectDevice(d) },
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        Modifier.padding(16.dp).fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Lightbulb, null, tint = MaterialTheme.colorScheme.primary)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(d.name, style = MaterialTheme.typography.titleMedium)
+                                            val pLabel = if (d.providerId == TUYA_PROVIDER_ID) "Smart Life" else "Govee"
+                                            val statusLabel = if (d.isOnline) "Online" else "Offline"
+                                            Text(
+                                                "$pLabel • $statusLabel",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (d.isOnline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            w.scenes.forEach { s ->
+                                ElevatedCard(
+                                    onClick = { vm.selectScene(s) },
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        Modifier.padding(16.dp).fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(s.name, style = MaterialTheme.typography.titleMedium)
+                                            Text("Smart Life Scene", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
                 WizardStep.PICK_ACTION -> {
-                    Text("Choose an action", style = MaterialTheme.typography.titleMedium)
-                    ActionType.entries.forEach { a ->
+                    Text("What should it do?", style = MaterialTheme.typography.titleMedium)
+                    listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF).forEach { a ->
                         ElevatedCard(onClick = { vm.selectAction(a) }, modifier = Modifier.fillMaxWidth()) {
                             Text(actionLabel(a), Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
                         }
@@ -482,21 +753,20 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text("About TapRelay") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TapRelay by ARBH Labs — version 0.0.2 (alpha).", style = MaterialTheme.typography.bodyMedium)
+                Text("TapRelay by ARBH Labs — version 0.0.4 (alpha).", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "This is an early internal test build. Things may change or break.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Govee control uses your own personal key from the Govee Home app. Govee's developer " +
-                        "API is licensed for personal, non-commercial use. TapRelay is not affiliated with, " +
-                        "sponsored by, or endorsed by Govee or Google.",
+                    "Smart-home control uses your own personal developer credentials under a Bring-Your-Own-Key model. " +
+                        "TapRelay is not affiliated with, sponsored by, or endorsed by Govee, Tuya, Smart Life, or Google.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Your key is stored encrypted on this device only and is never sent anywhere except to Govee.",
+                    "All credentials are encrypted using hardware-backed Android Keystore keys (AES256-GCM) on this device only.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -599,4 +869,5 @@ private fun actionLabel(a: ActionType) = when (a) {
     ActionType.TOGGLE -> "Toggle"
     ActionType.TURN_ON -> "Turn On"
     ActionType.TURN_OFF -> "Turn Off"
+    ActionType.RUN_SCENE -> "Run Scene"
 }

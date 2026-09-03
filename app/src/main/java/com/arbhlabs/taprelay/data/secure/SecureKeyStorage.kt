@@ -16,6 +16,10 @@ class SecureKeyStorage(
     private val aeadManager: TinkAeadManager
 ) {
     private val GOVEE_API_KEY = stringPreferencesKey("govee_api_key")
+    private val TUYA_ACCESS_ID = stringPreferencesKey("tuya_access_id")
+    private val TUYA_ACCESS_SECRET = stringPreferencesKey("tuya_access_secret")
+    private val TUYA_REGION = stringPreferencesKey("tuya_region")
+    private val TUYA_UID = stringPreferencesKey("tuya_uid")
 
     fun getGoveeApiKey(): Flow<String?> {
         return context.dataStore.data.map { preferences ->
@@ -41,4 +45,52 @@ class SecureKeyStorage(
             preferences.remove(GOVEE_API_KEY)
         }
     }
+
+    fun getTuyaCredentials(): Flow<TuyaCredentials?> {
+        return context.dataStore.data.map { preferences ->
+            val encId = preferences[TUYA_ACCESS_ID] ?: return@map null
+            val encSec = preferences[TUYA_ACCESS_SECRET] ?: return@map null
+            val encReg = preferences[TUYA_REGION]
+            val encUid = preferences[TUYA_UID]
+            try {
+                TuyaCredentials(
+                    accessId = aeadManager.decrypt(encId),
+                    accessSecret = aeadManager.decrypt(encSec),
+                    region = encReg?.let { aeadManager.decrypt(it) } ?: "us",
+                    uid = encUid?.let { aeadManager.decrypt(it) } ?: ""
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    suspend fun saveTuyaCredentials(creds: TuyaCredentials) {
+        val encId = aeadManager.encrypt(creds.accessId)
+        val encSec = aeadManager.encrypt(creds.accessSecret)
+        val encReg = aeadManager.encrypt(creds.region)
+        val encUid = aeadManager.encrypt(creds.uid)
+        context.dataStore.edit { preferences ->
+            preferences[TUYA_ACCESS_ID] = encId
+            preferences[TUYA_ACCESS_SECRET] = encSec
+            preferences[TUYA_REGION] = encReg
+            preferences[TUYA_UID] = encUid
+        }
+    }
+
+    suspend fun clearTuyaCredentials() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(TUYA_ACCESS_ID)
+            preferences.remove(TUYA_ACCESS_SECRET)
+            preferences.remove(TUYA_REGION)
+            preferences.remove(TUYA_UID)
+        }
+    }
 }
+
+data class TuyaCredentials(
+    val accessId: String,
+    val accessSecret: String,
+    val region: String = "us",
+    val uid: String = ""
+)

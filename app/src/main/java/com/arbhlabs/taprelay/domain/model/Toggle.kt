@@ -7,6 +7,7 @@ object Toggle {
         ActionType.TURN_ON -> 1
         ActionType.TURN_OFF -> 0
         ActionType.TOGGLE -> if (lastKnownState == 1) 0 else 1
+        ActionType.RUN_SCENE -> 1
     }
 
     /** Inverse of an authoritative state reading (used when a live query succeeds). */

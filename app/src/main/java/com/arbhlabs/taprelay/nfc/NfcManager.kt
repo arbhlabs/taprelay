@@ -102,7 +102,7 @@ class NfcManager(private val activity: Activity) {
                 verify(readBack, tagId)
                 return
             }
-            val formatable = NdefFormatable.get(tag) ?: throw TapException(TapError.TAG_MALFORMED)
+            val formatable = NdefFormatable.get(tag) ?: throw TapException(TapError.TAG_UNSUPPORTED)
             formatable.connect()
             if (lock) formatable.formatReadOnly(message) else formatable.format(message)
             runCatching { formatable.close() }

@@ -3,6 +3,7 @@ package com.arbhlabs.taprelay.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.TargetType
 
 /**
  * Local mapping between an opaque physical tag identifier and a smart-home action.
@@ -18,6 +19,7 @@ data class TagEntity(
     val deviceId: String,
     val deviceSku: String,
     val actionType: ActionType,
+    val targetType: TargetType = TargetType.DEVICE,
     val enabled: Boolean = true,
     val lastKnownState: Int = 1,
     val createdAt: Long = System.currentTimeMillis(),

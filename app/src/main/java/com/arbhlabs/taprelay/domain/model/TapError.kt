@@ -13,7 +13,9 @@ enum class TapError(val message: String) {
     NFC_DISABLED("Turn on NFC in your phone settings to use tags."),
     WRITE_INTERRUPTED("Tag moved too quickly. Hold it still against the phone."),
     TAG_READ_ONLY("This tag is locked and can't be written."),
+    TAG_UNSUPPORTED("This tag is not supported by TapRelay."),
     TAG_TOO_SMALL("This tag doesn't have enough space."),
+    AUTH_TUYA("Your Smart Life connection needs to be reconnected."),
     PROVIDER_UNAVAILABLE("That smart-home service isn't connected."),
     SERVER("The service is having a brief hiccup. Try again shortly."),
     UNKNOWN("Something went wrong. Try again.");

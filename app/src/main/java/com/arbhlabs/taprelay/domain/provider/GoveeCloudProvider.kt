@@ -22,6 +22,7 @@ class GoveeCloudProvider(
 ) : SmartHomeProvider {
 
     override val providerId = GOVEE_PROVIDER_ID
+    override val displayName = "Govee"
 
     private suspend fun key(): String =
         keys.getGoveeApiKey().first() ?: throw TapException(TapError.AUTH)

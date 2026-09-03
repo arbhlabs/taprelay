@@ -7,9 +7,12 @@ import com.arbhlabs.taprelay.data.prefs.AppPreferences
 import com.arbhlabs.taprelay.data.remote.govee.GoveeApiClient
 import com.arbhlabs.taprelay.data.secure.SecureKeyStorage
 import com.arbhlabs.taprelay.data.secure.TinkAeadManager
+import com.arbhlabs.taprelay.data.remote.tuya.TuyaApiClient
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.GoveeCloudProvider
 import com.arbhlabs.taprelay.domain.provider.SmartHomeProvider
+import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
+import com.arbhlabs.taprelay.domain.provider.TuyaProvider
 import com.arbhlabs.taprelay.domain.repository.TagRepository
 import com.arbhlabs.taprelay.execution.ActionExecutor
 import com.arbhlabs.taprelay.execution.HapticsManager
@@ -21,7 +24,9 @@ class ServiceLocator(context: Context) {
 
     val database: AppDatabase = Room.databaseBuilder(
         appContext, AppDatabase::class.java, "taprelay.db"
-    ).fallbackToDestructiveMigration().build()
+    ).addMigrations(AppDatabase.MIGRATION_1_2)
+     .fallbackToDestructiveMigration()
+     .build()
 
     val preferences = AppPreferences(appContext)
 
@@ -33,8 +38,12 @@ class ServiceLocator(context: Context) {
     private val goveeApi = GoveeApiClient()
     val goveeProvider = GoveeCloudProvider(goveeApi, secureKeyStorage)
 
+    private val tuyaApi = TuyaApiClient()
+    val tuyaProvider = TuyaProvider(tuyaApi, secureKeyStorage)
+
     val providers: Map<String, SmartHomeProvider> = mapOf(
-        GOVEE_PROVIDER_ID to goveeProvider
+        GOVEE_PROVIDER_ID to goveeProvider,
+        TUYA_PROVIDER_ID to tuyaProvider
     )
 
     val haptics = HapticsManager(appContext)

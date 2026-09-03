@@ -1,6 +1,8 @@
 package com.arbhlabs.taprelay.execution
 
+import android.util.Log
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.Toggle
 import com.arbhlabs.taprelay.domain.model.TapException
@@ -31,6 +33,11 @@ class ActionExecutor(
 ) {
     private val lastFired = HashMap<String, Long>()
 
+    private companion object {
+        /** Outcome logging for field diagnostics. Never records tag names or credentials. */
+        const val TAG = "TapRelayExec"
+    }
+
     fun executeByTagId(tagId: String, onFeedback: (TapFeedback) -> Unit) {
         val now = System.currentTimeMillis()
         synchronized(lastFired) {
@@ -53,38 +60,72 @@ class ActionExecutor(
             onFeedback(TapFeedback("${tag.friendlyName} is turned off in the app.", isError = true))
             return
         }
-
         haptics.vibrateClick()
-
-        val optimisticTarget = Toggle.target(tag.actionType, tag.lastKnownState)
-        onFeedback(TapFeedback("${tag.friendlyName} • ${label(optimisticTarget)}", isError = false, pending = true))
-        tags.updateStateAndTimestamp(tag.tagId, optimisticTarget, System.currentTimeMillis())
 
         val provider = providers()[tag.providerId]
         if (provider == null) {
-            revert(tag.tagId, tag.lastKnownState)
             haptics.vibrateError()
             onFeedback(TapFeedback(TapError.PROVIDER_UNAVAILABLE.message, isError = true))
             return
         }
 
-        try {
-            val finalTarget = if (tag.actionType == ActionType.TOGGLE) {
-                val real = runCatching { provider.getPowerState(tag.deviceId, tag.deviceSku) }.getOrNull()
-                if (real != null) Toggle.inverseOf(real) else optimisticTarget
-            } else optimisticTarget
+        if (tag.targetType == TargetType.SCENE || tag.actionType == ActionType.RUN_SCENE) {
+            onFeedback(TapFeedback("${tag.friendlyName} • Running scene…", isError = false, pending = true))
+            try {
+                provider.executeAction(
+                    targetId = tag.deviceId,
+                    targetType = TargetType.SCENE,
+                    sku = tag.deviceSku,
+                    action = ActionType.RUN_SCENE,
+                    targetState = 1
+                )
+                tags.updateStateAndTimestamp(tag.tagId, 1, System.currentTimeMillis())
+                withContext(Dispatchers.Main) {
+                    haptics.vibrateSuccess()
+                    onFeedback(TapFeedback("${tag.friendlyName} • Scene started", isError = false))
+                }
+            } catch (e: TapException) {
+                haptics.vibrateError()
+                onFeedback(TapFeedback(e.error.message, isError = true))
+            } catch (e: Exception) {
+                haptics.vibrateError()
+                onFeedback(TapFeedback(TapError.UNKNOWN.message, isError = true))
+            }
+            return
+        }
 
-            provider.setPower(tag.deviceId, tag.deviceSku, on = finalTarget == 1)
+        val finalTarget: Int
+        try {
+            if (tag.actionType == ActionType.TOGGLE) {
+                onFeedback(TapFeedback("${tag.friendlyName} • Updating…", isError = false, pending = true))
+                val real = provider.getPowerState(tag.deviceId, tag.deviceSku)
+                finalTarget = if (real != null) Toggle.inverseOf(real) else Toggle.target(tag.actionType, tag.lastKnownState)
+                Log.i(TAG, "toggle provider=${tag.providerId} read=${real ?: "unknown"} sending=$finalTarget")
+            } else {
+                finalTarget = Toggle.target(tag.actionType, tag.lastKnownState)
+                onFeedback(TapFeedback("${tag.friendlyName} • ${label(finalTarget)}", isError = false, pending = true))
+            }
+
+            provider.executeAction(
+                targetId = tag.deviceId,
+                targetType = TargetType.DEVICE,
+                sku = tag.deviceSku,
+                action = tag.actionType,
+                targetState = finalTarget
+            )
             tags.updateStateAndTimestamp(tag.tagId, finalTarget, System.currentTimeMillis())
+            Log.i(TAG, "ok provider=${tag.providerId} action=${tag.actionType} state=$finalTarget")
             withContext(Dispatchers.Main) {
                 haptics.vibrateSuccess()
                 onFeedback(TapFeedback("${tag.friendlyName} • ${label(finalTarget)}", isError = false))
             }
         } catch (e: TapException) {
+            Log.w(TAG, "failed provider=${tag.providerId} error=${e.error.name}")
             revert(tag.tagId, tag.lastKnownState)
             haptics.vibrateError()
             onFeedback(TapFeedback(e.error.message, isError = true))
         } catch (e: Exception) {
+            Log.w(TAG, "failed provider=${tag.providerId} error=unexpected")
             revert(tag.tagId, tag.lastKnownState)
             haptics.vibrateError()
             onFeedback(TapFeedback(TapError.UNKNOWN.message, isError = true))

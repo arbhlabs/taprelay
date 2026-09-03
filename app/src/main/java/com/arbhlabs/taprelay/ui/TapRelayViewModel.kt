@@ -5,10 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.arbhlabs.taprelay.TapRelayApplication
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
+import com.arbhlabs.taprelay.data.secure.TuyaCredentials
 import com.arbhlabs.taprelay.domain.model.ActionType
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
+import com.arbhlabs.taprelay.domain.model.DiscoveredScene
 import com.arbhlabs.taprelay.domain.model.TapException
+import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
+import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.execution.TapFeedback
 import com.arbhlabs.taprelay.nfc.NfcPayloadParser
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,8 +36,11 @@ data class WizardState(
     val editingExisting: Boolean = false,
     val tagId: String? = null,
     val discovering: Boolean = false,
+    val targetType: TargetType = TargetType.DEVICE,
     val devices: List<DiscoveredDevice> = emptyList(),
+    val scenes: List<DiscoveredScene> = emptyList(),
     val device: DiscoveredDevice? = null,
+    val scene: DiscoveredScene? = null,
     val action: ActionType = ActionType.TOGGLE,
     val name: String = "",
     val iconKey: String = "lamp",
@@ -45,6 +52,10 @@ data class HomeUiState(
     val loading: Boolean = true,
     val onboardingComplete: Boolean = false,
     val goveeConnected: Boolean = false,
+    val goveeDeviceCount: Int = 0,
+    val tuyaConnected: Boolean = false,
+    val tuyaDeviceCount: Int = 0,
+    val tuyaSceneCount: Int = 0,
     val tags: List<TagEntity> = emptyList()
 )
 
@@ -53,13 +64,28 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     private val services = (app as TapRelayApplication).services
 
     private val goveeConnected = MutableStateFlow(false)
+    private val goveeDeviceCount = MutableStateFlow(0)
+    private val tuyaConnected = MutableStateFlow(false)
+    private val tuyaDeviceCount = MutableStateFlow(0)
+    private val tuyaSceneCount = MutableStateFlow(0)
 
     val ui: StateFlow<HomeUiState> = combine(
         services.preferences.onboardingComplete,
         services.tagRepository.getAllTags(),
-        goveeConnected
-    ) { onboarded, tags, govee ->
-        HomeUiState(false, onboarded, govee, tags)
+        goveeConnected,
+        goveeDeviceCount,
+        tuyaConnected
+    ) { onboarded, tags, govee, gDevs, tuya ->
+        HomeUiState(
+            loading = false,
+            onboardingComplete = onboarded,
+            goveeConnected = govee,
+            goveeDeviceCount = gDevs,
+            tuyaConnected = tuya,
+            tuyaDeviceCount = tuyaDeviceCount.value,
+            tuyaSceneCount = tuyaSceneCount.value,
+            tags = tags
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
 
     private val _wizard = MutableStateFlow(WizardState())
@@ -75,10 +101,35 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     val nfcReady = _nfcReady.asStateFlow()
     fun setNfcReady(ready: Boolean) { _nfcReady.value = ready }
 
-    init { refreshGoveeConnected() }
+    init {
+        refreshConnections()
+    }
 
-    fun refreshGoveeConnected() = viewModelScope.launch {
-        goveeConnected.value = services.goveeProvider.isConnected()
+    fun refreshConnections() = viewModelScope.launch {
+        val gConn = services.goveeProvider.isConnected()
+        goveeConnected.value = gConn
+        if (gConn) {
+            runCatching {
+                val devs = services.goveeProvider.discoverDevices()
+                goveeDeviceCount.value = devs.size
+            }
+        } else {
+            goveeDeviceCount.value = 0
+        }
+
+        val tConn = services.tuyaProvider.isConnected()
+        tuyaConnected.value = tConn
+        if (tConn) {
+            runCatching {
+                val devs = services.tuyaProvider.discoverDevices()
+                val scenes = services.tuyaProvider.discoverScenes()
+                tuyaDeviceCount.value = devs.size
+                tuyaSceneCount.value = scenes.size
+            }
+        } else {
+            tuyaDeviceCount.value = 0
+            tuyaSceneCount.value = 0
+        }
     }
 
     // ---- Onboarding / provider ----
@@ -94,7 +145,7 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         data object Idle : ConnectState
         data object Validating : ConnectState
         data class Error(val message: String) : ConnectState
-        data class Success(val deviceCount: Int) : ConnectState
+        data class Success(val title: String, val count: Int) : ConnectState
     }
 
     fun connectGovee(apiKey: String) = viewModelScope.launch {
@@ -106,11 +157,42 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val devices = services.goveeProvider.validateAndSave(apiKey)
             goveeConnected.value = true
-            _connectState.value = ConnectState.Success(devices.size)
+            goveeDeviceCount.value = devices.size
+            _connectState.value = ConnectState.Success("Govee", devices.size)
         } catch (e: TapException) {
             _connectState.value = ConnectState.Error(e.error.message)
         } catch (e: Exception) {
             _connectState.value = ConnectState.Error("Couldn't reach Govee. Check your connection.")
+        }
+    }
+
+    fun connectTuya(
+        accessId: String,
+        secret: String,
+        region: String = "us",
+        uid: String = ""
+    ) = viewModelScope.launch {
+        if (accessId.isBlank() || secret.isBlank()) {
+            _connectState.value = ConnectState.Error("Enter your Access ID and Access Secret.")
+            return@launch
+        }
+        _connectState.value = ConnectState.Validating
+        try {
+            val creds = TuyaCredentials(
+                accessId = accessId.trim(),
+                accessSecret = secret.trim(),
+                region = region.trim().ifBlank { "us" },
+                uid = uid.trim()
+            )
+            val (devices, scenes) = services.tuyaProvider.validateAndSave(creds)
+            tuyaConnected.value = true
+            tuyaDeviceCount.value = devices.size
+            tuyaSceneCount.value = scenes.size
+            _connectState.value = ConnectState.Success("Smart Life", devices.size)
+        } catch (e: TapException) {
+            _connectState.value = ConnectState.Error(e.error.message)
+        } catch (e: Exception) {
+            _connectState.value = ConnectState.Error("Couldn't reach Smart Life. Check your connection.")
         }
     }
 
@@ -119,6 +201,14 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     fun disconnectGovee() = viewModelScope.launch {
         services.secureKeyStorage.clearGoveeApiKey()
         goveeConnected.value = false
+        goveeDeviceCount.value = 0
+    }
+
+    fun disconnectTuya() = viewModelScope.launch {
+        services.secureKeyStorage.clearTuyaCredentials()
+        tuyaConnected.value = false
+        tuyaDeviceCount.value = 0
+        tuyaSceneCount.value = 0
     }
 
     // ---- Add-tag wizard ----
@@ -157,7 +247,7 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         _wizard.value = _wizard.value.copy(
             tagId = tagId, step = WizardStep.PICK_DEVICE, scanPhase = ScanPhase.READY, error = null
         )
-        discoverDevices()
+        discoverDevicesAndScenes()
     }
 
     /** A tag scanned in the wizard that already carries a valid TapRelay identity. */
@@ -168,11 +258,12 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             step = WizardStep.PICK_DEVICE,
             editingExisting = true,
             tagId = tagId,
+            targetType = existing?.targetType ?: TargetType.DEVICE,
             action = existing?.actionType ?: ActionType.TOGGLE,
             name = existing?.friendlyName ?: "",
             iconKey = existing?.iconKey ?: "lamp"
         )
-        discoverDevices()
+        discoverDevicesAndScenes()
     }
 
     fun onWizardWriteError(message: String) {
@@ -185,11 +276,12 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             step = WizardStep.PICK_DEVICE,
             editingExisting = true,
             tagId = tag.tagId,
+            targetType = tag.targetType,
             action = tag.actionType,
             name = tag.friendlyName,
             iconKey = tag.iconKey
         )
-        discoverDevices()
+        discoverDevicesAndScenes()
     }
 
     fun configureUnregisteredTag(tagId: String) {
@@ -197,14 +289,30 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         _wizard.value = WizardState(
             active = true, step = WizardStep.PICK_DEVICE, editingExisting = true, tagId = tagId
         )
-        discoverDevices()
+        discoverDevicesAndScenes()
     }
 
-    private fun discoverDevices() = viewModelScope.launch {
+    private fun discoverDevicesAndScenes() = viewModelScope.launch {
         _wizard.value = _wizard.value.copy(discovering = true, error = null)
         try {
-            val devices = services.goveeProvider.discoverDevices()
-            _wizard.value = _wizard.value.copy(discovering = false, devices = devices)
+            val allDevices = mutableListOf<DiscoveredDevice>()
+            val allScenes = mutableListOf<DiscoveredScene>()
+
+            if (services.goveeProvider.isConnected()) {
+                runCatching { allDevices.addAll(services.goveeProvider.discoverDevices()) }
+            }
+            if (services.tuyaProvider.isConnected()) {
+                runCatching {
+                    allDevices.addAll(services.tuyaProvider.discoverDevices())
+                    allScenes.addAll(services.tuyaProvider.discoverScenes())
+                }
+            }
+
+            _wizard.value = _wizard.value.copy(
+                discovering = false,
+                devices = allDevices,
+                scenes = allScenes
+            )
         } catch (e: TapException) {
             _wizard.value = _wizard.value.copy(discovering = false, error = e.error.message)
         } catch (e: Exception) {
@@ -212,13 +320,27 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun retryDiscovery() = discoverDevices()
+    fun retryDiscovery() = discoverDevicesAndScenes()
 
     fun selectDevice(d: DiscoveredDevice) {
         _wizard.value = _wizard.value.copy(
             device = d,
+            scene = null,
+            targetType = TargetType.DEVICE,
             name = _wizard.value.name.ifBlank { d.name },
             step = WizardStep.PICK_ACTION
+        )
+    }
+
+    fun selectScene(s: DiscoveredScene) {
+        _wizard.value = _wizard.value.copy(
+            scene = s,
+            device = null,
+            targetType = TargetType.SCENE,
+            action = ActionType.RUN_SCENE,
+            name = _wizard.value.name.ifBlank { s.name },
+            iconKey = "scene",
+            step = WizardStep.NAME
         )
     }
 
@@ -232,26 +354,53 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     fun saveTag() = viewModelScope.launch {
         val w = _wizard.value
         val id = w.tagId ?: return@launch
-        val device = w.device ?: return@launch
         _wizard.value = w.copy(busy = true)
         val existing = services.tagRepository.getTagById(id)
-        val entity = (existing ?: TagEntity(
-            tagId = id,
-            friendlyName = "",
-            iconKey = w.iconKey,
-            providerId = GOVEE_PROVIDER_ID,
-            deviceId = device.deviceId,
-            deviceSku = device.sku,
-            actionType = w.action
-        )).copy(
-            friendlyName = w.name.ifBlank { device.name },
-            iconKey = w.iconKey,
-            deviceId = device.deviceId,
-            deviceSku = device.sku,
-            providerId = device.providerId,
-            actionType = w.action,
-            modifiedAt = System.currentTimeMillis()
-        )
+
+        val entity = if (w.targetType == TargetType.SCENE) {
+            val scene = w.scene ?: return@launch
+            (existing ?: TagEntity(
+                tagId = id,
+                friendlyName = "",
+                iconKey = w.iconKey,
+                providerId = scene.providerId,
+                deviceId = scene.sceneId,
+                deviceSku = "tuya_scene",
+                actionType = ActionType.RUN_SCENE,
+                targetType = TargetType.SCENE
+            )).copy(
+                friendlyName = w.name.ifBlank { scene.name },
+                iconKey = w.iconKey,
+                deviceId = scene.sceneId,
+                deviceSku = "tuya_scene",
+                providerId = scene.providerId,
+                actionType = ActionType.RUN_SCENE,
+                targetType = TargetType.SCENE,
+                modifiedAt = System.currentTimeMillis()
+            )
+        } else {
+            val device = w.device ?: return@launch
+            (existing ?: TagEntity(
+                tagId = id,
+                friendlyName = "",
+                iconKey = w.iconKey,
+                providerId = device.providerId,
+                deviceId = device.deviceId,
+                deviceSku = device.sku,
+                actionType = w.action,
+                targetType = TargetType.DEVICE
+            )).copy(
+                friendlyName = w.name.ifBlank { device.name },
+                iconKey = w.iconKey,
+                deviceId = device.deviceId,
+                deviceSku = device.sku,
+                providerId = device.providerId,
+                actionType = w.action,
+                targetType = TargetType.DEVICE,
+                modifiedAt = System.currentTimeMillis()
+            )
+        }
+
         services.tagRepository.upsert(entity)
         _wizard.value = _wizard.value.copy(busy = false, step = WizardStep.DONE)
     }

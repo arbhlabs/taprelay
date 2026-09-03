@@ -19,10 +19,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import kotlinx.coroutines.sync.Mutex
+
 class MainActivity : ComponentActivity() {
 
     private val vm: TapRelayViewModel by viewModels()
     private lateinit var nfc: NfcManager
+    private val tagMutex = Mutex()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,33 +48,43 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun handleTag(tag: Tag) {
-        val w = vm.wizard.value
-        val provisioning = w.active && w.step == WizardStep.SCAN
+        if (!tagMutex.tryLock()) return
+        try {
+            val w = vm.wizard.value
+            // If user is inside later wizard steps (choosing device/action/name), ignore tag touches
+            if (w.active && w.step != WizardStep.SCAN) return
 
-        if (provisioning) {
-            // Ignore repeat dispatches while a write is already in progress.
-            if (w.scanPhase == ScanPhase.WRITING) return
-            if (!nfc.isEnabled) { vm.onWizardWriteError(TapError.NFC_DISABLED.message); return }
-            vm.onTagDetected()
-            vm.services().haptics.vibrateTick()
+            val provisioning = w.active && w.step == WizardStep.SCAN
 
-            when (val inspection = withContext(Dispatchers.IO) { nfc.inspect(tag) }) {
-                is TagInspection.Provisioned -> vm.onExistingTapRelayTag(inspection.tagId)
-                TagInspection.Blank -> writeNewTag(tag)
-                TagInspection.ForeignData ->
-                    if (w.allowOverwrite) writeNewTag(tag) else vm.onNeedOverwriteConfirm()
-                TagInspection.NotWritable, TagInspection.Unsupported ->
-                    vm.onWizardWriteError("This NFC sticker can't be written.")
+            if (provisioning) {
+                // Ignore repeat dispatches while a write is already in progress.
+                if (w.scanPhase == ScanPhase.WRITING) return
+                if (!nfc.isEnabled) { vm.onWizardWriteError(TapError.NFC_DISABLED.message); return }
+                vm.onTagDetected()
+                vm.services().haptics.vibrateTick()
+
+                when (val inspection = withContext(Dispatchers.IO) { nfc.inspect(tag) }) {
+                    is TagInspection.Provisioned -> vm.onExistingTapRelayTag(inspection.tagId)
+                    TagInspection.Blank -> writeNewTag(tag)
+                    TagInspection.ForeignData ->
+                        if (w.allowOverwrite) writeNewTag(tag) else vm.onNeedOverwriteConfirm()
+                    TagInspection.NotWritable ->
+                        vm.onWizardWriteError(TapError.TAG_READ_ONLY.message)
+                    TagInspection.Unsupported ->
+                        vm.onWizardWriteError(TapError.TAG_UNSUPPORTED.message)
+                }
+                return
             }
-            return
-        }
 
-        // Normal scan mode
-        val existingId = withContext(Dispatchers.IO) { nfc.readTagId(tag) }
-        if (existingId != null) {
-            vm.onForegroundScan(existingId)
-        } else if (!w.active) {
-            vm.showPill(TapFeedback("This tag isn't configured for TapRelay.", isError = true))
+            // Normal scan mode
+            val existingId = withContext(Dispatchers.IO) { nfc.readTagId(tag) }
+            if (existingId != null) {
+                vm.onForegroundScan(existingId)
+            } else if (!w.active) {
+                vm.showPill(TapFeedback("This tag isn't configured for TapRelay.", isError = true))
+            }
+        } finally {
+            tagMutex.unlock()
         }
     }
 

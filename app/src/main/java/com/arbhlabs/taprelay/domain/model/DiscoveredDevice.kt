@@ -6,5 +6,6 @@ data class DiscoveredDevice(
     val sku: String,
     val name: String,
     val providerId: String,
-    val supportsPower: Boolean
+    val supportsPower: Boolean,
+    val isOnline: Boolean = true
 )

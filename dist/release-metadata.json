@@ -2,39 +2,42 @@
   "product": "TapRelay",
   "vendor": "ARBH Labs",
   "channel": "alpha",
-  "versionName": "0.0.2",
-  "versionCode": 2,
+  "versionName": "0.0.4",
+  "versionCode": 4,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
-  "date": "2026-09-03",
-  "artifact": "TapRelay-v0.0.2.apk",
-  "sha256": "fe6b05cab3763525dd7d36f08f81c6da658b3b1a3ef83efa831d5c243f1d282e",
-  "sizeBytes": 6608894,
+  "date": "2026-09-04",
+  "artifact": "TapRelay-v0.0.4.apk",
+  "sha256": "026e57e485da904214f7ecd1c5568916ad27f186a8801cf518add8915ef98772",
+  "sizeBytes": 6757226,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
-    "schemes": "v1+v2+v3",
+    "schemes": "v2 (APK Signature Scheme v2)",
+    "certSubject": "CN=ARBH Labs, OU=TapRelay, O=ARBH Labs, C=US",
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
   "verifiedOnPixel7": [
-    "clean + upgrade install",
-    "provision a real blank NFC sticker in Add Tag",
-    "select Govee Desk Lamp + Toggle, save mapping",
-    "background scan of the sticker toggles the lamp, scan again toggles it back",
-    "edit action without rewriting the sticker",
-    "rapid duplicate scan debounced (1.5s)",
-    "About disclaimer dialog"
+    "in-place upgrade over the installed build with tag mappings and provider keys preserved",
+    "real Smart Life / Tuya discovery lists Corner Lamp, Accent Lamp Bottom and Accent Light Top by their account names",
+    "Turn On, Turn Off and Toggle all executed against the real Corner Lamp",
+    "Toggle reads the live switch_led data point and sends the inverse",
+    "two consecutive scans of a real NFC sticker toggle Corner Lamp on then off",
+    "Govee discovery and Toggle still work and were left in their original state"
   ],
   "notVerified": [
+    "Accent Lamp Bottom and Accent Light Top control (both offline in the Tuya account at test time)",
+    "Tuya scenes (the project has no scene subscription; the scene list is empty)",
     "cold-start-from-killed scan latency (functional, not timed)",
-    "read-only / locked tag path",
     "App Link autoVerify (needs assetlinks.json on taprelay.app)"
   ],
   "providers": {
     "govee": "cloud OpenAPI v2.0, BYOK, personal/non-profit terms",
-    "googleHome": "provider boundary only, disabled",
+    "tuya": "Tuya IoT Core cloud project, BYOK (Access ID + Secret), Central Europe data centre",
+    "googleHome": "not implemented",
+    "sensibo": "not implemented",
     "goveeLan": "not implemented",
     "matter": "not implemented"
   },
-  "publicDistribution": "owner decision — see SITE_PUBLISH.md; keep the alpha + non-affiliation disclaimer visible"
+  "publicDistribution": "private alpha — keep the alpha + non-affiliation disclaimer visible"
 }
