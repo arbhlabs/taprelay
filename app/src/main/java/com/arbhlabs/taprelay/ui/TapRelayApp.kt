@@ -1,8 +1,15 @@
 package com.arbhlabs.taprelay.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -11,6 +18,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.*
@@ -18,6 +27,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,6 +54,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
     val pill by vm.pill.collectAsState()
     val wizard by vm.wizard.collectAsState()
     val setupPrompt by vm.setupPrompt.collectAsState()
+    val nfcReady by vm.nfcReady.collectAsState()
 
     var startedOnboarding by rememberSaveable { mutableStateOf(false) }
 
@@ -54,11 +66,11 @@ fun TapRelayApp(vm: TapRelayViewModel) {
             !ui.onboardingComplete ->
                 ConnectScreen(vm, onDone = { vm.completeOnboarding() })
 
-            else -> HomeScreen(vm, ui.tags, ui.goveeConnected)
+            else -> HomeScreen(vm, ui.tags, ui.goveeConnected, nfcReady)
         }
 
         if (wizard.active) {
-            Surface(Modifier.fillMaxSize()) { AddTagFlow(vm) }
+            Surface(Modifier.fillMaxSize()) { AddTagFlow(vm, nfcReady) }
         }
 
         TapRelayPill(feedback = pill, onDismiss = { vm.clearPill() }, modifier = Modifier.align(Alignment.TopCenter))
@@ -143,7 +155,13 @@ private fun ConnectScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("Connect")
             }
-            Divider()
+            Text(
+                "Govee's developer API is for personal, non-commercial use. TapRelay is a private alpha " +
+                    "and isn't affiliated with or endorsed by Govee.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            HorizontalDivider()
             Text("Google Home", style = MaterialTheme.typography.titleSmall)
             Text(
                 "Google Home support needs provider access from Google and isn't enabled in this private alpha.",
@@ -156,8 +174,10 @@ private fun ConnectScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnected: Boolean) {
+private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnected: Boolean, nfcReady: Boolean) {
     var detail by remember { mutableStateOf<TagEntity?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -175,7 +195,19 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                             )
                         }
                     )
-                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Default.MoreVert, "More")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("About TapRelay") },
+                            onClick = { menuOpen = false; showAbout = true }
+                        )
+                        if (goveeConnected) DropdownMenuItem(
+                            text = { Text("Disconnect Govee") },
+                            onClick = { menuOpen = false; vm.disconnectGovee() }
+                        )
+                    }
                 }
             )
         },
@@ -187,9 +219,11 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
             )
         }
     ) { pad ->
+      Column(Modifier.padding(pad).fillMaxSize()) {
+        if (!nfcReady) NfcOffBanner()
         if (tags.isEmpty()) {
             Column(
-                Modifier.padding(pad).fillMaxSize().padding(32.dp),
+                Modifier.fillMaxSize().padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -203,7 +237,7 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                 )
             }
         } else {
-            Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                 tags.forEach { tag ->
                     ElevatedCard(
                         onClick = { detail = tag },
@@ -234,7 +268,10 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                 Spacer(Modifier.height(80.dp))
             }
         }
+      }
     }
+
+    if (showAbout) AboutDialog(onDismiss = { showAbout = false })
 
     detail?.let { tag ->
         TagDetailSheet(
@@ -304,7 +341,7 @@ private fun TagDetailSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddTagFlow(vm: TapRelayViewModel) {
+private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
     val w by vm.wizard.collectAsState()
 
     Scaffold(topBar = {
@@ -322,16 +359,7 @@ private fun AddTagFlow(vm: TapRelayViewModel) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when (w.step) {
-                WizardStep.SCAN -> {
-                    Text("Hold an NFC sticker to the back of your phone", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "On a Pixel, the sensor is near the top-centre of the back. Keep the sticker still until you feel a tap.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    CircularProgressIndicator()
-                    w.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                }
+                WizardStep.SCAN -> ScanStep(w, vm, nfcReady)
 
                 WizardStep.PICK_DEVICE -> {
                     Text("Choose a device", style = MaterialTheme.typography.titleMedium)
@@ -395,6 +423,132 @@ private fun AddTagFlow(vm: TapRelayViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NfcOffBanner() {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(Icons.Default.Nfc, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Text(
+                "NFC is off. Turn it on in your phone settings to set up or use tags.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+        title = { Text("About TapRelay") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("TapRelay by ARBH Labs — version 0.0.2 (alpha).", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "This is an early internal test build. Things may change or break.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Govee control uses your own personal key from the Govee Home app. Govee's developer " +
+                        "API is licensed for personal, non-commercial use. TapRelay is not affiliated with, " +
+                        "sponsored by, or endorsed by Govee or Google.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Your key is stored encrypted on this device only and is never sent anywhere except to Govee.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun ScanStep(w: WizardState, vm: TapRelayViewModel, nfcReady: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        if (!nfcReady) NfcOffBanner()
+        Text(
+            "Hold an NFC sticker to the back of your phone",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            "On a Pixel, the sensor is near the top-centre of the back. Keep the sticker still until you feel a tap.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+            when (w.scanPhase) {
+                ScanPhase.READY -> NfcPulse()
+                ScanPhase.DETECTED, ScanPhase.WRITING ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CircularProgressIndicator()
+                        Text(
+                            if (w.scanPhase == ScanPhase.WRITING) "Setting up your sticker…" else "NFC sticker detected",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                ScanPhase.CONFIRM_OVERWRITE ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "This sticker already contains data. TapRelay can replace it.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = { vm.cancelWizard() }) { Text("Cancel") }
+                            Button(onClick = { vm.confirmOverwrite() }) { Text("Use this tag") }
+                        }
+                        Text(
+                            "Then hold the same sticker to the phone again.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                ScanPhase.ERROR ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            w.error ?: "Something went wrong.",
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center
+                        )
+                        Button(onClick = { vm.retryScan() }) { Text("Try again") }
+                    }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NfcPulse() {
+    val transition = rememberInfiniteTransition(label = "nfc")
+    val scale by transition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "scale"
+    )
+    Box(
+        Modifier
+            .size(96.dp)
+            .scale(scale)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Default.Nfc, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
     }
 }
 

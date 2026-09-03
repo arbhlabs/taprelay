@@ -1,31 +1,40 @@
 {
   "product": "TapRelay",
   "vendor": "ARBH Labs",
-  "channel": "alpha-internal",
-  "versionName": "0.0.1",
-  "versionCode": 1,
+  "channel": "alpha",
+  "versionName": "0.0.2",
+  "versionCode": 2,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
   "date": "2026-09-03",
-  "artifact": "TapRelay-v0.0.1.apk",
-  "sha256": "005dacde338470c89fa08d917ca8d3bc9e30d88c3be617735796d54daea32e19",
-  "sizeBytes": 6576126,
+  "artifact": "TapRelay-v0.0.2.apk",
+  "sha256": "f8fb132fe3aebf869ac223642e0a0f37a0b09d366eb1cd39e3448c2c7b2ecf68",
+  "sizeBytes": 6608894,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
     "schemes": "v1+v2+v3",
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
-  "gitCommit": "547be47e3d11149ce7860b4626b18a8aa6fc01c6",
+  "verifiedOnPixel7": [
+    "clean + upgrade install",
+    "provision a real blank NFC sticker in Add Tag",
+    "select Govee Desk Lamp + Toggle, save mapping",
+    "background scan of the sticker toggles the lamp, scan again toggles it back",
+    "edit action without rewriting the sticker",
+    "rapid duplicate scan debounced (1.5s)",
+    "About disclaimer dialog"
+  ],
+  "notVerified": [
+    "cold-start-from-killed scan latency (functional, not timed)",
+    "read-only / locked tag path",
+    "App Link autoVerify (needs assetlinks.json on taprelay.app)"
+  ],
   "providers": {
-    "govee": "cloud OpenAPI v2.0, BYOK, private/non-profit terms — not for public commercial distribution",
-    "googleHome": "provider boundary only, disabled in alpha",
+    "govee": "cloud OpenAPI v2.0, BYOK, personal/non-profit terms",
+    "googleHome": "provider boundary only, disabled",
     "goveeLan": "not implemented",
     "matter": "not implemented"
   },
-  "publicDistribution": false,
-  "publicDistributionBlockedBy": [
-    "Govee developer API is personal/non-profit only; public/commercial distribution needs a B2B agreement",
-    "no Cloudflare/R2 credentials available in this environment"
-  ]
+  "publicDistribution": "owner decision — see SITE_PUBLISH.md; keep the alpha + non-affiliation disclaimer visible"
 }

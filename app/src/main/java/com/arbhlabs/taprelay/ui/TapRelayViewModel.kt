@@ -21,9 +21,14 @@ import kotlinx.coroutines.launch
 
 enum class WizardStep { SCAN, PICK_DEVICE, PICK_ACTION, NAME, DONE }
 
+/** Sub-states of the SCAN step while the user holds a sticker to the phone. */
+enum class ScanPhase { READY, DETECTED, WRITING, CONFIRM_OVERWRITE, ERROR }
+
 data class WizardState(
     val active: Boolean = false,
     val step: WizardStep = WizardStep.SCAN,
+    val scanPhase: ScanPhase = ScanPhase.READY,
+    val allowOverwrite: Boolean = false,
     val editingExisting: Boolean = false,
     val tagId: String? = null,
     val discovering: Boolean = false,
@@ -65,6 +70,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _setupPrompt = MutableStateFlow<String?>(null)
     val setupPrompt = _setupPrompt.asStateFlow()
+
+    private val _nfcReady = MutableStateFlow(true)
+    val nfcReady = _nfcReady.asStateFlow()
+    fun setNfcReady(ready: Boolean) { _nfcReady.value = ready }
 
     init { refreshGoveeConnected() }
 
@@ -120,14 +129,54 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelWizard() { _wizard.value = WizardState() }
 
-    /** Called by the Activity once a blank tag has been written with [tagId]. */
+    // ---- SCAN step transitions (driven by the Activity's NFC callback) ----
+
+    fun onTagDetected() {
+        if (_wizard.value.step == WizardStep.SCAN)
+            _wizard.value = _wizard.value.copy(scanPhase = ScanPhase.DETECTED, error = null)
+    }
+
+    fun onWriting() {
+        _wizard.value = _wizard.value.copy(scanPhase = ScanPhase.WRITING, error = null)
+    }
+
+    fun onNeedOverwriteConfirm() {
+        _wizard.value = _wizard.value.copy(scanPhase = ScanPhase.CONFIRM_OVERWRITE, error = null)
+    }
+
+    fun confirmOverwrite() {
+        _wizard.value = _wizard.value.copy(allowOverwrite = true, scanPhase = ScanPhase.READY, error = null)
+    }
+
+    fun retryScan() {
+        _wizard.value = _wizard.value.copy(scanPhase = ScanPhase.READY, error = null)
+    }
+
+    /** Called by the Activity once a tag has been written with [tagId]. */
     fun onTagWritten(tagId: String) {
-        _wizard.value = _wizard.value.copy(tagId = tagId, step = WizardStep.PICK_DEVICE)
+        _wizard.value = _wizard.value.copy(
+            tagId = tagId, step = WizardStep.PICK_DEVICE, scanPhase = ScanPhase.READY, error = null
+        )
+        discoverDevices()
+    }
+
+    /** A tag scanned in the wizard that already carries a valid TapRelay identity. */
+    fun onExistingTapRelayTag(tagId: String) = viewModelScope.launch {
+        val existing = services.tagRepository.getTagById(tagId)
+        _wizard.value = WizardState(
+            active = true,
+            step = WizardStep.PICK_DEVICE,
+            editingExisting = true,
+            tagId = tagId,
+            action = existing?.actionType ?: ActionType.TOGGLE,
+            name = existing?.friendlyName ?: "",
+            iconKey = existing?.iconKey ?: "lamp"
+        )
         discoverDevices()
     }
 
     fun onWizardWriteError(message: String) {
-        _wizard.value = _wizard.value.copy(error = message)
+        _wizard.value = _wizard.value.copy(scanPhase = ScanPhase.ERROR, error = message)
     }
 
     fun editTag(tag: TagEntity) {

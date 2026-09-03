@@ -1,36 +1,39 @@
 # TapRelay Changelog
 
-## v0.0.1 — 2026-09-03 (Alpha / Internal Test)
+## v0.0.2 — 2026-09-03 (Alpha / Internal Test)
 
-First build. TapRelay turns ordinary NFC stickers into physical smart-home buttons.
+Real-hardware completion pass. The full loop now works end-to-end on a Pixel 7:
+provision a blank sticker → pick a Govee device + Toggle → tap sticker → light toggles → tap again → toggles back.
+
+### Fixed
+- **Add Tag could not provision a normal blank sticker** — it showed "This tag isn't a
+  TapRelay tag." The reader was started with `FLAG_READER_SKIP_NDEF_CHECK`, which left the
+  `Ndef` / `NdefFormatable` techs off the tag so the writer had nothing to write to. The flag
+  is removed; blank and unformatted stickers now provision on the first tap.
+- Provisioning is now a real state machine that separates *scan mode* from *provisioning mode*:
+  a non-TapRelay tag is only an error in normal scanning; in Add Tag it is a candidate.
 
 ### Added
-- **First-run onboarding** — one screen, plain language, no slideshow.
-- **Connect Govee** — paste a personal Govee key from the Govee Home app; TapRelay validates it
-  and discovers your controllable lights automatically. No device IDs, MAC addresses or JSON.
-- **Add Tag wizard** — hold a blank NFC sticker to the phone, pick a device by friendly name,
-  pick Toggle / Turn On / Turn Off, name it, choose an icon, save.
-- **Stateless tags** — the sticker only ever stores an opaque `https://taprelay.app/t/<uuid>`
-  App Link. The device, action and name live on the phone and can be changed later without
-  re-tapping the sticker.
-- **Scan to run** — tapping a programmed sticker fires an instant haptic and a top-of-screen
-  pill (`Desk Lamp • On`). Works from the home screen or any other app via a translucent
-  trampoline activity.
-- **Optimistic Toggle** — perceived response under ~150 ms; for Toggle the real device state is
-  queried in the background and reconciled, with automatic rollback on failure.
-- **Tag management** — rename, enable/disable, change device or action, test action, delete.
-- **Human error copy** — every failure is plain language (offline, needs reconnecting, device
-  not responding, tag not set up, tag moved too quickly, …). No error codes, no jargon.
-- **Encrypted key storage** — Govee key held in a Jetpack DataStore encrypted with Google Tink
-  (AES-256-GCM), master key in the Android Keystore. Excluded from cloud backup and device transfer.
-- **Reader-mode NFC** — `NfcAdapter.enableReaderMode` with platform sounds suppressed and a
-  presence-check delay; duplicate scans within 1.5 s are debounced.
+- **Add Tag scan states**: Ready (pulsing NFC target) → Detected → Setting up your sticker… →
+  advances automatically. Errors show a plain message + a Try again button (no more stuck error).
+- **Already-has-data stickers**: "This sticker already contains data. TapRelay can replace it."
+  with **Use this tag / Cancel** — nothing is overwritten without confirmation.
+- **Already-a-TapRelay-tag**: jumps straight to its configuration (pre-filled if a mapping exists).
+- **Read-only / unsupported stickers**: "This NFC sticker can't be written."
+- Write is **verified by read-back** where the tag allows it.
+- **NFC-off banner** on the home screen and in Add Tag when NFC is disabled.
+- **About TapRelay** dialog (overflow menu) with the alpha + Govee non-affiliation disclaimer.
+- **Disconnect Govee** in the overflow menu.
 
-### Known limitations
-- **Govee**: personal / non-profit API terms only — shipped as a private alpha under
-  Bring-Your-Own-Key. No Govee partnership or approval is claimed.
-- **Google Home**: not enabled. The provider boundary and UX state exist; the integration
-  requires provider access from Google that is not available for this alpha.
-- **Govee LAN / Matter**: not implemented in v0.0.1 (cloud OpenAPI only).
-- The scan pill in the trampoline path is a lightweight Compose overlay, not the full
-  "dynamic island" treatment.
+### Unchanged / still true
+- Physical tag stores only the opaque `https://taprelay.app/t/<uuid>` App Link. Mapping is local
+  and editable without re-tapping the sticker.
+- Govee: personal / non-profit API terms, Bring-Your-Own-Key, private alpha, no partnership claimed.
+- Google Home: provider boundary only, not enabled.
+- Govee LAN / Matter: not implemented.
+
+## v0.0.1 — 2026-09-03 (Alpha / Internal Test)
+
+First build. Onboarding, Govee connect + discovery, Add Tag wizard, stateless tags, scan-to-run
+with optimistic toggle + rollback, tag management, Tink-encrypted key storage, human error copy,
+reader-mode NFC, translucent trampoline scan path. 17 unit tests. Signed release.
