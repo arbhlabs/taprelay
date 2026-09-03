@@ -1,0 +1,31 @@
+{
+  "product": "TapRelay",
+  "vendor": "ARBH Labs",
+  "channel": "alpha-internal",
+  "versionName": "0.0.1",
+  "versionCode": 1,
+  "applicationId": "com.arbhlabs.taprelay",
+  "minSdk": 30,
+  "targetSdk": 35,
+  "date": "2026-09-03",
+  "artifact": "TapRelay-v0.0.1.apk",
+  "sha256": "005dacde338470c89fa08d917ca8d3bc9e30d88c3be617735796d54daea32e19",
+  "sizeBytes": 6576126,
+  "signing": {
+    "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
+    "schemes": "v1+v2+v3",
+    "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
+  },
+  "gitCommit": "547be47e3d11149ce7860b4626b18a8aa6fc01c6",
+  "providers": {
+    "govee": "cloud OpenAPI v2.0, BYOK, private/non-profit terms — not for public commercial distribution",
+    "googleHome": "provider boundary only, disabled in alpha",
+    "goveeLan": "not implemented",
+    "matter": "not implemented"
+  },
+  "publicDistribution": false,
+  "publicDistributionBlockedBy": [
+    "Govee developer API is personal/non-profit only; public/commercial distribution needs a B2B agreement",
+    "no Cloudflare/R2 credentials available in this environment"
+  ]
+}
