@@ -9,7 +9,7 @@
   "targetSdk": 35,
   "date": "2026-09-03",
   "artifact": "TapRelay-v0.0.2.apk",
-  "sha256": "f8fb132fe3aebf869ac223642e0a0f37a0b09d366eb1cd39e3448c2c7b2ecf68",
+  "sha256": "fe6b05cab3763525dd7d36f08f81c6da658b3b1a3ef83efa831d5c243f1d282e",
   "sizeBytes": 6608894,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",

@@ -3,10 +3,29 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- fingertip / tap point -->
     <path
-        android:fillColor="#4FD1C5"
-        android:pathData="M54,30c-10,0 -18,8 -18,18c0,7 4,13 10,16v8h16v-8c6,-3 10,-9 10,-16C72,38 64,30 54,30zM49,74h10v5h-10z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M40,66m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0z" />
+
+    <!-- ripple arcs radiating from the tap point -->
     <path
-        android:fillColor="#2C7A7B"
-        android:pathData="M54,20l4,8h-8z" />
+        android:strokeColor="#FF6EE7DA"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M48,54.1 A16,16 0 0 1 48,77.9" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M53,45.5 A26,26 0 0 1 53,86.5" />
+    <path
+        android:strokeColor="#FFB9F3EC"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M57,38 A33,33 0 0 1 57,94" />
 </vector>

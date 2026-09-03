@@ -15,30 +15,45 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val Teal = Color(0xFF4FD1C5)
-private val TealDark = Color(0xFF2C7A7B)
+private val Teal = Color(0xFF5BE7D6)
+private val TealDim = Color(0xFF7DD6CC)
+private val TealDark = Color(0xFF1C6E68)
 
 private val LightColors = lightColorScheme(
     primary = TealDark,
     onPrimary = Color.White,
+    primaryContainer = Color(0xFFB9F3EC),
+    onPrimaryContainer = Color(0xFF00201E),
     secondary = TealDark,
-    background = Color(0xFFF7F9FA),
+    background = Color(0xFFF5F8F8),
     surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFE3EAEA),
+    outline = Color(0xFF9BB0AE),
 )
 
 private val DarkColors = darkColorScheme(
     primary = Teal,
-    onPrimary = Color(0xFF06201F),
-    secondary = Teal,
-    background = Color(0xFF0B0F14),
-    surface = Color(0xFF11161C),
-    surfaceVariant = Color(0xFF1B2229),
+    onPrimary = Color(0xFF00332F),
+    primaryContainer = Color(0xFF0E4A44),
+    onPrimaryContainer = Color(0xFFB9F3EC),
+    secondary = TealDim,
+    background = Color(0xFF080C0E),
+    onBackground = Color(0xFFE7EDEC),
+    surface = Color(0xFF10161A),
+    onSurface = Color(0xFFE7EDEC),
+    surfaceVariant = Color(0xFF1B2530),
+    onSurfaceVariant = Color(0xFFAFC0BE),
+    surfaceContainer = Color(0xFF161D22),
+    surfaceContainerHigh = Color(0xFF1C242A),
+    outline = Color(0xFF3A4A48),
+    errorContainer = Color(0xFF5A2426),
+    onErrorContainer = Color(0xFFFFD9D9),
 )
 
 @Composable
 fun TapRelayTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current

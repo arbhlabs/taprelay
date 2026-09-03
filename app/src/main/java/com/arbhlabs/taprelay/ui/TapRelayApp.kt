@@ -1,19 +1,22 @@
 package com.arbhlabs.taprelay.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -28,7 +31,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -95,8 +99,23 @@ private fun OnboardingScreen(onGetStarted: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.Default.Bolt, null, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(28.dp))
+            Box(
+                Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Nfc, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.height(32.dp))
             Text(
                 "Turn NFC stickers into physical buttons for your smart home.",
                 style = MaterialTheme.typography.headlineSmall,
@@ -241,14 +260,21 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                 tags.forEach { tag ->
                     ElevatedCard(
                         onClick = { detail = tag },
+                        shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
                     ) {
                         Row(
-                            Modifier.padding(16.dp).fillMaxWidth(),
+                            Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 14.dp).fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(iconFor(tag.iconKey), null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(16.dp))
+                            Box(
+                                Modifier.size(40.dp).clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(iconFor(tag.iconKey), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            }
+                            Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     tag.friendlyName,
@@ -262,6 +288,10 @@ private fun HomeScreen(vm: TapRelayViewModel, tags: List<TagEntity>, goveeConnec
                                 )
                             }
                             TextButton(onClick = { vm.testTag(tag) }) { Text("Test") }
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight, null,
+                                tint = MaterialTheme.colorScheme.outline
+                            )
                         }
                     }
                 }
@@ -534,21 +564,34 @@ private fun ScanStep(w: WizardState, vm: TapRelayViewModel, nfcReady: Boolean) {
 @Composable
 private fun NfcPulse() {
     val transition = rememberInfiniteTransition(label = "nfc")
-    val scale by transition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "scale"
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
+        label = "ripple"
     )
-    Box(
-        Modifier
-            .size(96.dp)
-            .scale(scale)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(Icons.Default.Nfc, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+    val primary = MaterialTheme.colorScheme.primary
+    Box(Modifier.size(168.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.matchParentSize()) {
+            val maxR = size.minDimension / 2f
+            repeat(3) { i ->
+                val f = (progress + i / 3f) % 1f
+                drawCircle(
+                    color = primary.copy(alpha = (1f - f) * 0.4f),
+                    radius = maxR * f,
+                    style = Stroke(width = 3.dp.toPx())
+                )
+            }
+        }
+        Box(
+            Modifier
+                .size(84.dp)
+                .clip(CircleShape)
+                .background(primary.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Nfc, null, Modifier.size(36.dp), tint = primary)
+        }
     }
 }
 
