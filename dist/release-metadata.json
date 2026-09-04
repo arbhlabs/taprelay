@@ -2,14 +2,14 @@
   "product": "TapRelay",
   "vendor": "ARBH Labs",
   "channel": "alpha",
-  "versionName": "0.0.6",
-  "versionCode": 6,
+  "versionName": "0.0.7",
+  "versionCode": 7,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
   "date": "2026-09-04",
-  "artifact": "TapRelay-v0.0.6.apk",
-  "sha256": "059d8280b8ce7eedb704be4b0d6d259469da76889de4d68e80278dfe0cedf0a2",
+  "artifact": "TapRelay-v0.0.7.apk",
+  "sha256": "1514ca186f1f1cb8c9557a676625849da0b59155946db2ced4c52364ff6cfba1",
   "sizeBytes": 6822794,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
@@ -18,7 +18,8 @@
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
   "verifiedOnPixel7": [
-    "in-place upgrade with every tag, group and credential preserved",
+    "device picker reads 'Govee group \u2022 Online \u2022 on/off only' for the Govee room grouping and plain 'Govee \u2022 Online' for both real colour bulbs",
+    "in-place upgrade with every tag and credential preserved",
     "one tag setting six lights to Violet at 36% in a single tap, reported 5/6 (the sixth Govee light has no colour capability)",
     "Set Brightness on a real Govee light, 1/1",
     "group toggle, colour and brightness from 0.0.5 all still correct",

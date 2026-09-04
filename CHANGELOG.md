@@ -1,5 +1,15 @@
 # TapRelay Changelog
 
+## v0.0.7 — 2026-09-04 (Alpha / Internal Test)
+
+### Fixed
+- **A Govee room grouping is now labelled for what it is.** Govee's cloud reports a Home room
+  group as a device of its own, and only ever lets it be switched on and off. TapRelay listed it
+  next to real bulbs with no explanation, so a group containing it would say "5 of 6 of your
+  lights can do this" with no clue why. It now reads "Govee group • Online • on/off only", and
+  any light that reports neither colour nor brightness is marked "on/off only" too. Your bulbs
+  were never the problem.
+
 ## v0.0.6 — 2026-09-04 (Alpha / Internal Test)
 
 Scene-style tags. One sticker can now put a whole group of lights into an exact look —

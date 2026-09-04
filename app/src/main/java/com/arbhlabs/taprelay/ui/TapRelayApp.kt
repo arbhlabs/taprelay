@@ -663,10 +663,20 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(d.name, style = MaterialTheme.typography.titleMedium)
-                                            val pLabel = if (d.providerId == TUYA_PROVIDER_ID) "Smart Life" else "Govee"
+                                            // Govee exposes a room grouping as a device of its
+                                            // own, and its API only ever lets that switch on and
+                                            // off — so say so rather than leaving the user to
+                                            // wonder why it cannot take a colour.
+                                            val pLabel = when {
+                                                d.providerId == TUYA_PROVIDER_ID -> "Smart Life"
+                                                d.sku == GOVEE_GROUP_SKU -> "Govee group"
+                                                else -> "Govee"
+                                            }
                                             val statusLabel = if (d.isOnline) "Online" else "Offline"
+                                            val abilityLabel =
+                                                if (!d.supportsColor && !d.supportsBrightness) " • on/off only" else ""
                                             Text(
-                                                "$pLabel • $statusLabel",
+                                                "$pLabel • $statusLabel$abilityLabel",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = if (d.isOnline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outline
                                             )
@@ -888,7 +898,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text("About TapRelay") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TapRelay by ARBH Labs — version 0.0.6 (alpha).", style = MaterialTheme.typography.bodyMedium)
+                Text("TapRelay by ARBH Labs — version 0.0.7 (alpha).", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "This is an early internal test build. Things may change or break.",
                     style = MaterialTheme.typography.bodySmall,
@@ -1014,6 +1024,9 @@ private fun tagActionSummary(tag: TagEntity): String {
     val count = tag.allTargets.size
     return if (count > 1) "$action • $count lights" else action
 }
+
+/** Govee reports a Home room grouping as a device with this sku. */
+private const val GOVEE_GROUP_SKU = "SameModeGroup"
 
 private fun actionLabel(a: ActionType) = when (a) {
     ActionType.TOGGLE -> "Toggle"
