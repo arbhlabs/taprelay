@@ -99,7 +99,10 @@ class ActionExecutor(
 
         val finalTarget: Int
         try {
-            if (tag.actionType == ActionType.SET_BRIGHTNESS || tag.actionType == ActionType.SET_COLOR) {
+            if (tag.actionType == ActionType.SET_BRIGHTNESS ||
+                tag.actionType == ActionType.SET_COLOR ||
+                tag.actionType == ActionType.SET_SCENE
+            ) {
                 finalTarget = Toggle.target(tag.actionType, tag.lastKnownState)
                 onFeedback(TapFeedback("${tag.friendlyName} • ${settingLabel(tag)}", isError = false, pending = true))
             } else if (tag.actionType == ActionType.TOGGLE) {
@@ -182,6 +185,9 @@ class ActionExecutor(
         ActionType.SET_BRIGHTNESS ->
             "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%…"
         ActionType.SET_COLOR -> "${LightPresets.nameFor(tag.colorRgb ?: 0)}…"
+        ActionType.SET_SCENE ->
+            "${LightPresets.nameFor(tag.colorRgb ?: 0)} " +
+                "${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%…"
         else -> "Updating…"
     }
 
@@ -189,6 +195,9 @@ class ActionExecutor(
         ActionType.SET_BRIGHTNESS ->
             "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
         ActionType.SET_COLOR -> LightPresets.nameFor(tag.colorRgb ?: 0)
+        ActionType.SET_SCENE ->
+            "${LightPresets.nameFor(tag.colorRgb ?: 0)} " +
+                "${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
         else -> label(state)
     }
 }

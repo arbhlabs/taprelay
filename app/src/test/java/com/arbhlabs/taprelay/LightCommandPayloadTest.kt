@@ -113,6 +113,21 @@ class LightCommandPayloadTest {
         assertTrue(e is TapException && e.error == TapError.UNSUPPORTED_ACTION)
     }
 
+    @Test
+    fun tuya_look_sends_colour_and_brightness_as_one_data_point() = runTest {
+        val sent = mutableListOf<String>()
+        tuyaProvider(sent).setLook("dev1", "switch_led", 0x0000FF, 40)
+
+        // One request, not a colour command followed by a brightness command that fights it.
+        assertEquals(1, sent.size)
+        val body = sent.single()
+        assertTrue(body, body.contains(""""code":"work_mode","value":"colour""""))
+        assertTrue(body, body.contains(""""h":240"""))
+        // In colour mode the brightness rides on the colour value channel.
+        assertTrue(body, Regex(""""v":(39\d|40\d|41\d)""").containsMatchIn(body))
+        assertFalse(body, body.contains("bright_value"))
+    }
+
     // ---- Govee ----
 
     private fun goveeClient(sent: MutableList<String>) = GoveeApiClient(

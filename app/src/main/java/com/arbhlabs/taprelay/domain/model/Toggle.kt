@@ -8,7 +8,8 @@ object Toggle {
         ActionType.TURN_OFF -> 0
         ActionType.TOGGLE -> if (lastKnownState == 1) 0 else 1
         // Asking for a brightness or a colour is asking for light.
-        ActionType.SET_BRIGHTNESS, ActionType.SET_COLOR, ActionType.RUN_SCENE -> 1
+        ActionType.SET_BRIGHTNESS, ActionType.SET_COLOR, ActionType.SET_SCENE,
+        ActionType.RUN_SCENE -> 1
     }
 
     /** Inverse of an authoritative state reading (used when a live query succeeds). */

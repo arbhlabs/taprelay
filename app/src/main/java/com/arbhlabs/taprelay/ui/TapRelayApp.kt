@@ -566,7 +566,7 @@ private fun TagDetailSheet(
                 Switch(checked = tag.enabled, onCheckedChange = onToggleEnabled)
             }
             Text(
-                "Currently ${tagActionSummary(tag).lowercase()} on “${tag.friendlyName}”. " +
+                "Currently ${tagActionSummary(tag).lowercase()} on ${tag.allTargets.joinToString { it.name.ifBlank { "a light" } }}. " +
                     "Changing the device, scene, or action does not require re-tapping the sticker.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -716,18 +716,83 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                     val actions = buildList {
                         addAll(listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF))
                         val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
-                        if (picked.isNotEmpty() && picked.all { it.supportsBrightness }) add(ActionType.SET_BRIGHTNESS)
-                        if (picked.isNotEmpty() && picked.all { it.supportsColor }) add(ActionType.SET_COLOR)
+                        // Offered when any picked light can do it. A group is often a mix of
+                        // colour bulbs and plain on/off lights, and the colour ones should
+                        // still be settable; the ones that cannot are reported after the tap.
+                        if (picked.any { it.supportsBrightness }) add(ActionType.SET_BRIGHTNESS)
+                        if (picked.any { it.supportsColor }) add(ActionType.SET_COLOR)
+                        if (picked.any { it.supportsColor && it.supportsBrightness }) add(ActionType.SET_SCENE)
                     }
+                    val pickedForHint = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
                     actions.forEach { a ->
+                        val capable = when (a) {
+                            ActionType.SET_BRIGHTNESS -> pickedForHint.count { it.supportsBrightness }
+                            ActionType.SET_COLOR -> pickedForHint.count { it.supportsColor }
+                            ActionType.SET_SCENE ->
+                                pickedForHint.count { it.supportsColor && it.supportsBrightness }
+                            else -> pickedForHint.size
+                        }
                         ElevatedCard(onClick = { vm.selectAction(a) }, modifier = Modifier.fillMaxWidth()) {
-                            Text(actionLabel(a), Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+                            Column(Modifier.padding(16.dp)) {
+                                Text(actionLabel(a), style = MaterialTheme.typography.titleMedium)
+                                if (capable < pickedForHint.size) {
+                                    Text(
+                                        "$capable of ${pickedForHint.size} of your lights can do this",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
                 WizardStep.TUNE -> {
-                    if (w.action == ActionType.SET_BRIGHTNESS) {
+                    val wantsColor = w.action == ActionType.SET_COLOR || w.action == ActionType.SET_SCENE
+                    val wantsBrightness =
+                        w.action == ActionType.SET_BRIGHTNESS || w.action == ActionType.SET_SCENE
+
+                    if (wantsColor) {
+                        Text("Which colour?", style = MaterialTheme.typography.titleMedium)
+                        LightPresets.ALL.chunked(4).forEach { row ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            ) {
+                                row.forEach { preset ->
+                                    val selected = w.colorRgb == preset.rgb
+                                    Box(
+                                        Modifier
+                                            .size(56.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF000000L.toInt() or preset.rgb))
+                                            .border(
+                                                width = if (selected) 3.dp else 1.dp,
+                                                color = if (selected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant,
+                                                shape = CircleShape
+                                            )
+                                            .clickable { vm.setColor(preset.rgb) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (selected) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                null,
+                                                tint = Color.Black.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Text(
+                            LightPresets.nameFor(w.colorRgb),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    if (wantsBrightness) {
                         Text("How bright?", style = MaterialTheme.typography.titleMedium)
                         Text(
                             "${w.brightnessPercent}%",
@@ -740,50 +805,20 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                             valueRange = Brightness.MIN_PERCENT.toFloat()..Brightness.MAX_PERCENT.toFloat(),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Text(
-                            "Every tap of this sticker sets the light to exactly this brightness.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Text("Which colour?", style = MaterialTheme.typography.titleMedium)
-                        LightPresets.ALL.chunked(4).forEach { row ->
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-                            ) {
-                            row.forEach { preset ->
-                                val selected = w.colorRgb == preset.rgb
-                                Box(
-                                    Modifier
-                                        .size(56.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF000000L.toInt() or preset.rgb))
-                                        .border(
-                                            width = if (selected) 3.dp else 1.dp,
-                                            color = if (selected) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.outlineVariant,
-                                            shape = CircleShape
-                                        )
-                                        .clickable { vm.setColor(preset.rgb) },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (selected) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            null,
-                                            tint = Color.Black.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                }
-                            }
-                            }
-                        }
-                        Text(
-                            LightPresets.nameFor(w.colorRgb),
-                            style = MaterialTheme.typography.titleMedium
-                        )
                     }
+
+                    Text(
+                        if (w.action == ActionType.SET_SCENE) {
+                            "Every tap sets all of these lights to this exact colour and brightness."
+                        } else if (wantsColor) {
+                            "Every tap sets these lights to exactly this colour."
+                        } else {
+                            "Every tap sets these lights to exactly this brightness."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
                     Button(
                         onClick = { vm.confirmTuning() },
                         modifier = Modifier.fillMaxWidth().height(52.dp)
@@ -853,7 +888,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text("About TapRelay") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TapRelay by ARBH Labs — version 0.0.5 (alpha).", style = MaterialTheme.typography.bodyMedium)
+                Text("TapRelay by ARBH Labs — version 0.0.6 (alpha).", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "This is an early internal test build. Things may change or break.",
                     style = MaterialTheme.typography.bodySmall,
@@ -971,6 +1006,9 @@ private fun tagActionSummary(tag: TagEntity): String {
         ActionType.SET_BRIGHTNESS ->
             "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
         ActionType.SET_COLOR -> LightPresets.nameFor(tag.colorRgb ?: 0)
+        ActionType.SET_SCENE ->
+            "${LightPresets.nameFor(tag.colorRgb ?: 0)} " +
+                "${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
         else -> actionLabel(tag.actionType)
     }
     val count = tag.allTargets.size
@@ -983,5 +1021,6 @@ private fun actionLabel(a: ActionType) = when (a) {
     ActionType.TURN_OFF -> "Turn Off"
     ActionType.SET_BRIGHTNESS -> "Set Brightness"
     ActionType.SET_COLOR -> "Set Colour"
+    ActionType.SET_SCENE -> "Set Colour + Brightness"
     ActionType.RUN_SCENE -> "Run Scene"
 }

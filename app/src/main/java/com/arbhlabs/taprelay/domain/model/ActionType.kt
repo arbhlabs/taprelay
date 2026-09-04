@@ -6,5 +6,6 @@ enum class ActionType {
     TOGGLE,
     SET_BRIGHTNESS,
     SET_COLOR,
+    SET_SCENE,
     RUN_SCENE
 }

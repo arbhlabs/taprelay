@@ -1,5 +1,29 @@
 # TapRelay Changelog
 
+## v0.0.6 — 2026-09-04 (Alpha / Internal Test)
+
+Scene-style tags. One sticker can now put a whole group of lights into an exact look —
+colour and brightness together — in a single tap.
+
+### Added
+- **Set Colour + Brightness.** A tag can carry both at once, so a tap sets a room to, say,
+  violet at 36% rather than making you choose one or the other. On Tuya this is a single
+  request: in colour mode the brightness rides on the colour's own value channel, so a
+  separate brightness command cannot fight the colour it was just given.
+- Brightness, Colour and Colour + Brightness are now offered when **any** light in the group
+  supports them, not only when all do. A real group is usually a mix, and the colour bulbs in
+  it should still be settable. Each action says up front how many of your lights can do it
+  ("5 of 6 of your lights can do this"), and the confirmation after the tap says how many
+  actually changed.
+- The tag editor now names the lights a tag drives, so you can see a group without reopening
+  the picker.
+
+### Unchanged / still true
+- The physical sticker still stores only the opaque `https://taprelay.app/t/<uuid>` App Link.
+  Changing a group, a colour or a brightness never rewrites the sticker.
+- Private alpha. TapRelay is not affiliated with, sponsored by, or endorsed by Govee, Tuya,
+  Smart Life or Google.
+
 ## v0.0.5 — 2026-09-04 (Alpha / Internal Test)
 
 One sticker can now drive a whole group of lights, and a tap can set a brightness or a

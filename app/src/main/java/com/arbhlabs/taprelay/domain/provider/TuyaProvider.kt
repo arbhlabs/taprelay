@@ -198,6 +198,34 @@ class TuyaProvider(
         send(deviceId, commands)
     }
 
+    override suspend fun setLook(deviceId: String, sku: String, rgb: Int, percent: Int) {
+        val codes = dataPoints(deviceId).map { it.code }
+        val colorCode = codes.firstOrNull { it.startsWith(COLOR_PREFIX) }
+            ?: throw TapException(TapError.UNSUPPORTED_ACTION)
+        val powerCode = codes.firstOrNull { TuyaDeviceDto.isPowerDp(it) }
+            ?: sku.takeIf { it.isNotBlank() && it != "tuya_device" }
+
+        // In colour mode the brightness is the "v" of the colour, not bright_value, so the
+        // two are sent as one data point rather than as two commands that undo each other.
+        val (h, sat, _) = ColorMath.toTuyaHsv(rgb)
+        val value = Brightness.toTuyaColorValue(percent)
+        val commands = buildList {
+            powerCode?.let { add(TuyaCommandItem(it, JsonPrimitive(true))) }
+            if (codes.contains(WORK_MODE)) add(TuyaCommandItem(WORK_MODE, JsonPrimitive("colour")))
+            add(
+                TuyaCommandItem(
+                    colorCode,
+                    buildJsonObject {
+                        put("h", h)
+                        put("s", sat)
+                        put("v", value)
+                    }
+                )
+            )
+        }
+        send(deviceId, commands)
+    }
+
     override suspend fun executeAction(
         targetId: String,
         targetType: TargetType,
@@ -222,6 +250,12 @@ class TuyaProvider(
                 setBrightness(targetId, sku, brightnessPercent ?: Brightness.DEFAULT_PERCENT)
             ActionType.SET_COLOR ->
                 setColor(targetId, sku, colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION))
+            ActionType.SET_SCENE -> setLook(
+                targetId,
+                sku,
+                colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION),
+                brightnessPercent ?: Brightness.DEFAULT_PERCENT
+            )
             else -> setPower(targetId, sku, on = targetState == 1)
         }
     }

@@ -35,6 +35,15 @@ interface SmartHomeProvider {
     suspend fun setColor(deviceId: String, sku: String, rgb: Int): Unit =
         throw TapException(TapError.UNSUPPORTED_ACTION)
 
+    /**
+     * Applies a colour and a brightness together. The default does the two calls in order,
+     * which is right for providers that treat them as separate capabilities.
+     */
+    suspend fun setLook(deviceId: String, sku: String, rgb: Int, percent: Int) {
+        setColor(deviceId, sku, rgb)
+        setBrightness(deviceId, sku, percent)
+    }
+
     suspend fun executeAction(
         targetId: String,
         targetType: TargetType,
@@ -51,6 +60,12 @@ interface SmartHomeProvider {
             )
             ActionType.SET_COLOR -> setColor(
                 targetId, sku, colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION)
+            )
+            ActionType.SET_SCENE -> setLook(
+                targetId,
+                sku,
+                colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION),
+                brightnessPercent ?: Brightness.DEFAULT_PERCENT
             )
             else -> setPower(targetId, sku, on = targetState == 1)
         }

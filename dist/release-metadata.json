@@ -2,14 +2,14 @@
   "product": "TapRelay",
   "vendor": "ARBH Labs",
   "channel": "alpha",
-  "versionName": "0.0.5",
-  "versionCode": 5,
+  "versionName": "0.0.6",
+  "versionCode": 6,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
   "date": "2026-09-04",
-  "artifact": "TapRelay-v0.0.5.apk",
-  "sha256": "0e0f63312ce8d7c88f5375053a84c7993e4661076ada297e003782115621ed69",
+  "artifact": "TapRelay-v0.0.6.apk",
+  "sha256": "059d8280b8ce7eedb704be4b0d6d259469da76889de4d68e80278dfe0cedf0a2",
   "sizeBytes": 6822794,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
@@ -18,16 +18,14 @@
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
   "verifiedOnPixel7": [
-    "in-place upgrade over the installed build with tags, groups and provider keys preserved",
-    "one tag driving six real lights across both clouds, toggled off then on, 6/6 each time",
-    "a mixed Govee + Smart Life pair toggled from the primary light's authoritative state, 2/2 each way",
-    "Set Colour (Violet) accepted by both clouds for the mixed pair, 2/2",
-    "Set Brightness (25%) accepted by both clouds for the mixed pair, 2/2",
-    "Turn On, Turn Off and Toggle still correct on a single real light",
-    "new launcher icon checked on the device's own launcher, light mark on brand teal"
+    "in-place upgrade with every tag, group and credential preserved",
+    "one tag setting six lights to Violet at 36% in a single tap, reported 5/6 (the sixth Govee light has no colour capability)",
+    "Set Brightness on a real Govee light, 1/1",
+    "group toggle, colour and brightness from 0.0.5 all still correct",
+    "action list shows '5 of 6 of your lights can do this' before the tag is saved"
   ],
   "notVerified": [
-    "the exact rendered hue and brightness at the bulb (both clouds accepted every command and reported success, but colour temperature and perceived level are the owner's to judge)",
+    "the exact rendered hue and level at the bulb (both clouds accepted every command; judging the shade is the owner's call)",
     "Tuya scenes (the project has no scene subscription; the scene list is empty)",
     "cold-start-from-killed scan latency (functional, not timed)",
     "App Link autoVerify (needs assetlinks.json on taprelay.app)"

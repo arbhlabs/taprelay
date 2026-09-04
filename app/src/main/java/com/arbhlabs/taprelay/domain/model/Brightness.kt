@@ -11,6 +11,12 @@ object Brightness {
     /** Govee's range capability is a plain 1-100 percentage. */
     fun toGovee(percent: Int) = clampPercent(percent)
 
+    /**
+     * The "v" channel of Tuya's colour data point, also 10..1000. In colour mode this is
+     * what actually sets how bright the light is.
+     */
+    fun toTuyaColorValue(percent: Int) = toTuya(percent)
+
     /** Tuya's bright_value_v2 data point runs 10..1000. */
     fun toTuya(percent: Int): Int {
         val p = clampPercent(percent)

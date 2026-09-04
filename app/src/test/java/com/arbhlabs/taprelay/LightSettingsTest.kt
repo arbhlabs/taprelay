@@ -84,6 +84,14 @@ class LightSettingsTest {
     fun brightness_and_colour_actions_target_the_on_state() {
         assertEquals(1, Toggle.target(ActionType.SET_BRIGHTNESS, 0))
         assertEquals(1, Toggle.target(ActionType.SET_COLOR, 0))
+        assertEquals(1, Toggle.target(ActionType.SET_SCENE, 0))
         assertEquals(1, Toggle.target(ActionType.SET_BRIGHTNESS, 1))
+    }
+
+    @Test
+    fun the_colour_value_channel_uses_the_same_scale_as_the_brightness_data_point() {
+        assertEquals(Brightness.toTuya(40), Brightness.toTuyaColorValue(40))
+        assertEquals(10, Brightness.toTuyaColorValue(1))
+        assertEquals(1000, Brightness.toTuyaColorValue(100))
     }
 }

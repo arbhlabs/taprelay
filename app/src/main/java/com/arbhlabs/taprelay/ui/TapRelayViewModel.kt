@@ -360,8 +360,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         val action = _wizard.value.action
         // Drop an action the new selection cannot all perform.
         val stillValid = when (action) {
-            ActionType.SET_BRIGHTNESS -> picked.all { it.supportsBrightness }
-            ActionType.SET_COLOR -> picked.all { it.supportsColor }
+            ActionType.SET_BRIGHTNESS -> picked.any { it.supportsBrightness }
+            ActionType.SET_COLOR -> picked.any { it.supportsColor }
+            ActionType.SET_SCENE -> picked.any { it.supportsColor && it.supportsBrightness }
             ActionType.RUN_SCENE -> false
             else -> true
         }
@@ -392,7 +393,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectAction(a: ActionType) {
-        val needsValue = a == ActionType.SET_BRIGHTNESS || a == ActionType.SET_COLOR
+        val needsValue = a == ActionType.SET_BRIGHTNESS ||
+            a == ActionType.SET_COLOR ||
+            a == ActionType.SET_SCENE
         _wizard.value = _wizard.value.copy(
             action = a,
             step = if (needsValue) WizardStep.TUNE else WizardStep.NAME
@@ -460,8 +463,12 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 providerId = device.providerId,
                 actionType = w.action,
                 targetType = TargetType.DEVICE,
-                brightnessPercent = w.brightnessPercent.takeIf { w.action == ActionType.SET_BRIGHTNESS },
-                colorRgb = w.colorRgb.takeIf { w.action == ActionType.SET_COLOR },
+                brightnessPercent = w.brightnessPercent.takeIf {
+                    w.action == ActionType.SET_BRIGHTNESS || w.action == ActionType.SET_SCENE
+                },
+                colorRgb = w.colorRgb.takeIf {
+                    w.action == ActionType.SET_COLOR || w.action == ActionType.SET_SCENE
+                },
                 additionalTargets = extras,
                 modifiedAt = System.currentTimeMillis()
             )
