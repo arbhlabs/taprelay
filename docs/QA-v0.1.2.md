@@ -1,6 +1,6 @@
 # TapRelay 0.1.2 — QA record
 
-**Build**: versionName `0.1.2`, versionCode `13`, DB schema `8`
+**Build**: versionName `0.1.2`, versionCode `13`, DB schema `9`
 **Device**: Google Pixel 7 (`panther`), Android 15, in-place upgrade from vc12
 **Toolchain**: Microsoft JDK 21 (`jdk-21.0.12.101-hotspot`); the Studio JBR is Java 25 and breaks the compiler.
 
@@ -14,14 +14,15 @@ overwriting bytes someone may already have downloaded.
 
 | Check | Result |
 |---|---|
-| `testReleaseUnitTest` | **112 / 112 passed**, 0 failures (was 100 at 0.1.1) |
+| `testReleaseUnitTest` | **119 / 119 passed**, 0 failures (was 100 at 0.1.1) |
 | `lintVitalRelease` | clean |
 | `assembleRelease` (R8 + resource shrink) | clean |
 | `apksigner verify` | Signer #1 `CN=ARBH Labs, OU=TapRelay` — signature matches the installed app, so the upgrade kept all data |
 
 New test files: `ActivationModeTest` (activation resolution, converter round-trip, MIGRATION_7_8
 bounds), `SensiboCapabilitiesTest` (capability parsing, snapshot, capability-driven fan toggle,
-mode set).
+mode set), `PlaceTriggerTest` (arrive/leave routing in both directions, geofence-id round trip,
+transition converter, MIGRATION_8_9 bounds).
 
 ## Real-hardware verification (Pixel 7)
 
@@ -99,3 +100,57 @@ the in-app sheet, which is hardware-verified, and reuses the translucent activit
 `NfcTrampolineActivity` has shipped since 0.1.0. It was not driven end-to-end because a
 non-exported activity cannot be launched from `adb`. One physical tag tap on a tag set to Quick
 Controls would close that gap.
+
+## Added after the first QA pass
+
+### Controller rumble
+The pad reports `VIBRATOR` in `dumpsys input`, so the outcome of a press is felt in the hand
+holding the remote. A short flat tick could not be felt on a rotating-mass motor, so success is a
+quick rise into a full-strength thud and failure is three firm knocks, using haptic primitives
+where the pad supports them, amplitude-controlled waveforms where it does not, and a plain on/off
+pattern with generous timings as the floor.
+
+### Preferences
+One card on Controllers & Remotes — no new settings screen and no new menu entries: controller
+rumble, phone haptics, dim-when-idle, Remote Mode spacing (Compact / Normal / Large) and
+keep-screen-awake. Applied to the shared managers from `TapRelayApplication`, so the app, Remote
+Mode and the NFC trampoline all honour them.
+
+### Remote Mode, second pass
+Clock and date, controller battery when the pad reports one, a drawn pad that rings mapped
+controls and flashes the pressed one, per-mapping rows with live power dots, and last-outcome
+text. Dozing now drops the backlight to the panel's floor (`screenBrightness = 0f`), pins the
+slowest display mode and asks Android 15 for the low frame-rate category, redraws once a minute
+instead of once a second, and only wakes on a deliberate slide.
+
+**Measured on the Pixel 7**: the panel exposes only 60 Hz and 90 Hz as app-selectable modes. The
+20–45 Hz figures in `mSupportedRefreshRates` are system render rates, which is why the frame-rate
+category API is used alongside the mode request rather than instead of it.
+
+### Places
+`PlaceTriggerEntity` + `PlaceTriggerDao` + `GeofenceManager` + `GeofenceReceiver`, with
+`BootReceiver` rebuilding registrations after a reboot or an app replace. The receiver holds the
+broadcast open with `goAsync()` until the provider call finishes, and skips a place that fired
+within the last 30 s so GPS drift on a boundary cannot double-fire. A place always executes;
+Android forbids background activity starts, so Quick Controls is deliberately not offered there.
+
+Routing is unit-tested. The permission flow asks for foreground location first and only offers
+Settings after the in-app background prompt has actually been tried once.
+
+### Landscape
+Verified rotated on the device: the Remote Mode face splits into two panes with the pad capped so
+it cannot dominate a wide screen, Controllers & Remotes scrolls correctly, and Quick Controls and
+the item sheet scroll instead of clipping.
+
+## Self-review pass
+
+Four defects found in this release's own new code and fixed before shipping:
+
+1. Quick Controls marked the new state optimistically and left it there when the call failed, so
+   a failed toggle showed the device as on. The previous state is now restored with the error.
+2. Remote Mode could doze underneath an open Quick Controls panel. Since waking is a slide, the
+   buttons someone was aiming at would not bring the screen back. It no longer dozes while a panel
+   is open.
+3. The background-location card fired the system dialog and opened Settings at the same time,
+   burying the dialog.
+4. A geofence bounce could fire an item twice; added the cooldown above.
