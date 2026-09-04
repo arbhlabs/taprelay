@@ -2,14 +2,14 @@
   "product": "TapRelay",
   "vendor": "ARBH Labs",
   "channel": "alpha",
-  "versionName": "0.0.7",
-  "versionCode": 7,
+  "versionName": "0.0.8",
+  "versionCode": 8,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
   "date": "2026-09-04",
-  "artifact": "TapRelay-v0.0.7.apk",
-  "sha256": "1514ca186f1f1cb8c9557a676625849da0b59155946db2ced4c52364ff6cfba1",
+  "artifact": "TapRelay-v0.0.8.apk",
+  "sha256": "f697654367b756cdf6bea47e328cafaec0a5914340b8c307ef30aa57b501f244",
   "sizeBytes": 6822794,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
@@ -18,12 +18,11 @@
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
   "verifiedOnPixel7": [
-    "device picker reads 'Govee group \u2022 Online \u2022 on/off only' for the Govee room grouping and plain 'Govee \u2022 Online' for both real colour bulbs",
-    "in-place upgrade with every tag and credential preserved",
-    "one tag setting six lights to Violet at 36% in a single tap, reported 5/6 (the sixth Govee light has no colour capability)",
-    "Set Brightness on a real Govee light, 1/1",
-    "group toggle, colour and brightness from 0.0.5 all still correct",
-    "action list shows '5 of 6 of your lights can do this' before the tag is saved"
+    "a tag set to Toggle + Blue + 10% on a real Smart Life lamp: first tap read state 0 and brought it on blue at 10%, second tap read 1 and switched it off without applying the look",
+    "the tag list reads 'Smart Life - Toggle - Blue - 10%'",
+    "the action step offers a power choice plus independent colour and brightness switches",
+    "a fresh sticker provisioned and configured end to end through the new flow",
+    "in-place upgrade with existing tags preserved"
   ],
   "notVerified": [
     "the exact rendered hue and level at the bulb (both clouds accepted every command; judging the shade is the owner's call)",

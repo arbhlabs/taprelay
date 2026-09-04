@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.*
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -52,6 +53,7 @@ import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
 import com.arbhlabs.taprelay.domain.model.LightPresets
+import com.arbhlabs.taprelay.domain.model.powerIntent
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
@@ -722,45 +724,69 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                 }
 
                 WizardStep.PICK_ACTION -> {
-                    Text("What should it do?", style = MaterialTheme.typography.titleMedium)
-                    val actions = buildList {
-                        addAll(listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF))
-                        val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
-                        // Offered when any picked light can do it. A group is often a mix of
-                        // colour bulbs and plain on/off lights, and the colour ones should
-                        // still be settable; the ones that cannot are reported after the tap.
-                        if (picked.any { it.supportsBrightness }) add(ActionType.SET_BRIGHTNESS)
-                        if (picked.any { it.supportsColor }) add(ActionType.SET_COLOR)
-                        if (picked.any { it.supportsColor && it.supportsBrightness }) add(ActionType.SET_SCENE)
-                    }
-                    val pickedForHint = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
-                    actions.forEach { a ->
-                        val capable = when (a) {
-                            ActionType.SET_BRIGHTNESS -> pickedForHint.count { it.supportsBrightness }
-                            ActionType.SET_COLOR -> pickedForHint.count { it.supportsColor }
-                            ActionType.SET_SCENE ->
-                                pickedForHint.count { it.supportsColor && it.supportsBrightness }
-                            else -> pickedForHint.size
-                        }
-                        ElevatedCard(onClick = { vm.selectAction(a) }, modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(actionLabel(a), style = MaterialTheme.typography.titleMedium)
-                                if (capable < pickedForHint.size) {
-                                    Text(
-                                        "$capable of ${pickedForHint.size} of your lights can do this",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                    val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
+                    val colorCount = picked.count { it.supportsColor }
+                    val brightCount = picked.count { it.supportsBrightness }
+
+                    Text("What should the power do?", style = MaterialTheme.typography.titleMedium)
+                    listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF).forEach { a ->
+                        val chosen = w.action.powerIntent() == a
+                        ElevatedCard(
+                            onClick = { vm.selectAction(a) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                Modifier.padding(16.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    actionLabel(a),
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                RadioButton(selected = chosen, onClick = { vm.selectAction(a) })
                             }
                         }
                     }
+
+                    // Colour and brightness are extras on top of the power action, not
+                    // alternatives to it, so a tag can toggle a light *and* give it a look.
+                    val turnsOff = w.action.powerIntent() == ActionType.TURN_OFF
+                    if (!turnsOff && (colorCount > 0 || brightCount > 0)) {
+                        Text(
+                            "And when it comes on…",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        if (colorCount > 0) {
+                            ExtraToggleRow(
+                                label = "Also set a colour",
+                                hint = if (colorCount < picked.size)
+                                    "$colorCount of ${picked.size} of your lights can do this" else null,
+                                checked = w.wantsColor,
+                                onCheckedChange = { vm.setWantsColor(it) }
+                            )
+                        }
+                        if (brightCount > 0) {
+                            ExtraToggleRow(
+                                label = "Also set a brightness",
+                                hint = if (brightCount < picked.size)
+                                    "$brightCount of ${picked.size} of your lights can do this" else null,
+                                checked = w.wantsBrightness,
+                                onCheckedChange = { vm.setWantsBrightness(it) }
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { vm.continueFromAction() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp).padding(top = 8.dp)
+                    ) { Text("Continue") }
                 }
 
                 WizardStep.TUNE -> {
-                    val wantsColor = w.action == ActionType.SET_COLOR || w.action == ActionType.SET_SCENE
-                    val wantsBrightness =
-                        w.action == ActionType.SET_BRIGHTNESS || w.action == ActionType.SET_SCENE
+                    val wantsColor = w.wantsColor
+                    val wantsBrightness = w.wantsBrightness
 
                     if (wantsColor) {
                         Text("Which colour?", style = MaterialTheme.typography.titleMedium)
@@ -818,8 +844,8 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                     }
 
                     Text(
-                        if (w.action == ActionType.SET_SCENE) {
-                            "Every tap sets all of these lights to this exact colour and brightness."
+                        if (wantsColor && wantsBrightness) {
+                            "Whenever these lights come on, they come on at this colour and brightness."
                         } else if (wantsColor) {
                             "Every tap sets these lights to exactly this colour."
                         } else {
@@ -898,7 +924,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text("About TapRelay") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TapRelay by ARBH Labs — version 0.0.7 (alpha).", style = MaterialTheme.typography.bodyMedium)
+                Text("TapRelay by ARBH Labs — version 0.0.8 (alpha).", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "This is an early internal test build. Things may change or break.",
                     style = MaterialTheme.typography.bodySmall,
@@ -1012,21 +1038,49 @@ private fun NfcPulse() {
 
 /** What a saved tag does, including the brightness or colour it was given. */
 private fun tagActionSummary(tag: TagEntity): String {
-    val action = when (tag.actionType) {
-        ActionType.SET_BRIGHTNESS ->
-            "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
-        ActionType.SET_COLOR -> LightPresets.nameFor(tag.colorRgb ?: 0)
-        ActionType.SET_SCENE ->
-            "${LightPresets.nameFor(tag.colorRgb ?: 0)} " +
-                "${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
-        else -> actionLabel(tag.actionType)
+    val parts = buildList {
+        add(actionLabel(tag.actionType.powerIntent()))
+        tag.colorRgb?.let { add(LightPresets.nameFor(it)) }
+        tag.brightnessPercent?.let { add("${Brightness.clampPercent(it)}%") }
     }
+    val action = parts.joinToString(" • ")
     val count = tag.allTargets.size
     return if (count > 1) "$action • $count lights" else action
 }
 
 /** Govee reports a Home room grouping as a device with this sku. */
 private const val GOVEE_GROUP_SKU = "SameModeGroup"
+
+@Composable
+private fun ExtraToggleRow(
+    label: String,
+    hint: String?,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    // The whole row toggles, not just the switch: a 40dp switch is a fiddly target.
+    ElevatedCard(
+        onClick = { onCheckedChange(!checked) },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.titleMedium)
+                if (hint != null) {
+                    Text(
+                        hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
 
 private fun actionLabel(a: ActionType) = when (a) {
     ActionType.TOGGLE -> "Toggle"

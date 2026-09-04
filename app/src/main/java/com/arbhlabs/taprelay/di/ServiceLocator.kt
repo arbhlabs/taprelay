@@ -29,7 +29,8 @@ class ServiceLocator(context: Context) {
         AppDatabase.MIGRATION_2_3,
         AppDatabase.MIGRATION_3_4
     )
-     .fallbackToDestructiveMigration()
+     // No destructive fallback: a missing migration must fail loudly rather than
+     // silently deleting every tag mapping the owner has set up.
      .build()
 
     val preferences = AppPreferences(appContext)

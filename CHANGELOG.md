@@ -1,5 +1,29 @@
 # TapRelay Changelog
 
+## v0.0.8 - 2026-09-04 (Alpha / Internal Test)
+
+**Actions now combine.** Power, colour and brightness were three choices where you could only
+pick one. They are independent things, and a tag can now carry any combination of them.
+
+### Added
+- Choose what the power does (Toggle, Turn On, Turn Off) and then, separately, whether the tag
+  also sets a colour and whether it also sets a brightness. A sticker can toggle your TV lamp
+  and bring it up blue at 10%, which was impossible before.
+- Turning a light off stays off: there is no point colouring a dark bulb, so a tag that toggles
+  a light off skips its look and applies it again next time the light comes on.
+- Every combination works across a group of any size, mixing Govee and Smart Life.
+- The tag list spells the whole thing out, for example "Toggle - Blue - 10% - 3 lights".
+
+### Fixed
+- The "also set a colour / brightness" rows toggle from anywhere on the row, not only from the
+  small switch.
+- The database no longer falls back to a destructive migration, so a missing migration fails
+  loudly instead of silently deleting every tag mapping.
+
+### Unchanged
+- The sticker still stores only the opaque App Link. Tags saved by 0.0.5 to 0.0.7 keep working.
+- Private alpha. Not affiliated with Govee, Tuya, Smart Life or Google.
+
 ## v0.0.7 — 2026-09-04 (Alpha / Internal Test)
 
 ### Fixed

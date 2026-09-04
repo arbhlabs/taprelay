@@ -54,20 +54,32 @@ interface SmartHomeProvider {
         colorRgb: Int? = null
     ) {
         if (targetType == TargetType.SCENE) return
-        when (action) {
-            ActionType.SET_BRIGHTNESS -> setBrightness(
-                targetId, sku, brightnessPercent ?: Brightness.DEFAULT_PERCENT
-            )
-            ActionType.SET_COLOR -> setColor(
-                targetId, sku, colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION)
-            )
-            ActionType.SET_SCENE -> setLook(
-                targetId,
-                sku,
-                colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION),
-                brightnessPercent ?: Brightness.DEFAULT_PERCENT
-            )
-            else -> setPower(targetId, sku, on = targetState == 1)
+        applyToDevice(targetId, sku, targetState, brightnessPercent, colorRgb)
+    }
+
+    /**
+     * Power, colour and brightness are independent: a tag may set any combination of them.
+     * Turning a light off is just off — there is no point colouring a dark bulb — while
+     * anything that ends with the light on also applies whichever of colour and brightness
+     * the tag carries.
+     */
+    suspend fun applyToDevice(
+        deviceId: String,
+        sku: String,
+        targetState: Int,
+        brightnessPercent: Int?,
+        colorRgb: Int?
+    ) {
+        if (targetState != 1) {
+            setPower(deviceId, sku, on = false)
+            return
+        }
+        when {
+            colorRgb != null && brightnessPercent != null ->
+                setLook(deviceId, sku, colorRgb, brightnessPercent)
+            colorRgb != null -> setColor(deviceId, sku, colorRgb)
+            brightnessPercent != null -> setBrightness(deviceId, sku, brightnessPercent)
+            else -> setPower(deviceId, sku, on = true)
         }
     }
 }

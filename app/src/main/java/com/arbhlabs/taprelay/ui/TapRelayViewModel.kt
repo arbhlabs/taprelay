@@ -7,6 +7,7 @@ import com.arbhlabs.taprelay.TapRelayApplication
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.data.secure.TuyaCredentials
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.powerIntent
 import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
@@ -50,6 +51,9 @@ data class WizardState(
     val scene: DiscoveredScene? = null,
     val action: ActionType = ActionType.TOGGLE,
     val brightnessPercent: Int = Brightness.DEFAULT_PERCENT,
+    /** Colour and brightness are optional extras on top of whatever the power action is. */
+    val wantsColor: Boolean = false,
+    val wantsBrightness: Boolean = false,
     val colorRgb: Int = LightPresets.ALL.first().rgb,
     val name: String = "",
     val iconKey: String = "lamp",
@@ -271,6 +275,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             action = existing?.actionType ?: ActionType.TOGGLE,
             brightnessPercent = existing?.brightnessPercent ?: Brightness.DEFAULT_PERCENT,
             colorRgb = existing?.colorRgb ?: LightPresets.ALL.first().rgb,
+            wantsColor = existing?.colorRgb != null,
+            wantsBrightness = existing?.brightnessPercent != null,
             pendingTargetIds = existing?.allTargets?.map { it.deviceId } ?: emptyList(),
             name = existing?.friendlyName ?: "",
             iconKey = existing?.iconKey ?: "lamp"
@@ -292,6 +298,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             action = tag.actionType,
             brightnessPercent = tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT,
             colorRgb = tag.colorRgb ?: LightPresets.ALL.first().rgb,
+            wantsColor = tag.colorRgb != null,
+            wantsBrightness = tag.brightnessPercent != null,
             pendingTargetIds = tag.allTargets.map { it.deviceId },
             name = tag.friendlyName,
             iconKey = tag.iconKey
@@ -360,9 +368,6 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         val action = _wizard.value.action
         // Drop an action the new selection cannot all perform.
         val stillValid = when (action) {
-            ActionType.SET_BRIGHTNESS -> picked.any { it.supportsBrightness }
-            ActionType.SET_COLOR -> picked.any { it.supportsColor }
-            ActionType.SET_SCENE -> picked.any { it.supportsColor && it.supportsBrightness }
             ActionType.RUN_SCENE -> false
             else -> true
         }
@@ -392,13 +397,17 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun selectAction(a: ActionType) {
-        val needsValue = a == ActionType.SET_BRIGHTNESS ||
-            a == ActionType.SET_COLOR ||
-            a == ActionType.SET_SCENE
-        _wizard.value = _wizard.value.copy(
-            action = a,
-            step = if (needsValue) WizardStep.TUNE else WizardStep.NAME
+    /** Picks the power behaviour. Colour and brightness are chosen separately. */
+    fun selectAction(a: ActionType) { _wizard.value = _wizard.value.copy(action = a) }
+
+    fun setWantsColor(v: Boolean) { _wizard.value = _wizard.value.copy(wantsColor = v) }
+
+    fun setWantsBrightness(v: Boolean) { _wizard.value = _wizard.value.copy(wantsBrightness = v) }
+
+    fun continueFromAction() {
+        val w = _wizard.value
+        _wizard.value = w.copy(
+            step = if (w.wantsColor || w.wantsBrightness) WizardStep.TUNE else WizardStep.NAME
         )
     }
 
@@ -461,14 +470,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 deviceId = device.deviceId,
                 deviceSku = device.sku,
                 providerId = device.providerId,
-                actionType = w.action,
                 targetType = TargetType.DEVICE,
-                brightnessPercent = w.brightnessPercent.takeIf {
-                    w.action == ActionType.SET_BRIGHTNESS || w.action == ActionType.SET_SCENE
-                },
-                colorRgb = w.colorRgb.takeIf {
-                    w.action == ActionType.SET_COLOR || w.action == ActionType.SET_SCENE
-                },
+                actionType = w.action.powerIntent(),
+                brightnessPercent = w.brightnessPercent.takeIf { w.wantsBrightness },
+                colorRgb = w.colorRgb.takeIf { w.wantsColor },
                 additionalTargets = extras,
                 modifiedAt = System.currentTimeMillis()
             )

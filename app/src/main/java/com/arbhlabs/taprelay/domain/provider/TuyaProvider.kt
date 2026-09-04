@@ -245,19 +245,7 @@ class TuyaProvider(
             )
             return
         }
-        when (action) {
-            ActionType.SET_BRIGHTNESS ->
-                setBrightness(targetId, sku, brightnessPercent ?: Brightness.DEFAULT_PERCENT)
-            ActionType.SET_COLOR ->
-                setColor(targetId, sku, colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION))
-            ActionType.SET_SCENE -> setLook(
-                targetId,
-                sku,
-                colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION),
-                brightnessPercent ?: Brightness.DEFAULT_PERCENT
-            )
-            else -> setPower(targetId, sku, on = targetState == 1)
-        }
+        applyToDevice(targetId, sku, targetState, brightnessPercent, colorRgb)
     }
 
     private fun List<TuyaDeviceDto>.toDiscovered(): List<DiscoveredDevice> =

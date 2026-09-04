@@ -4,6 +4,7 @@ import android.util.Log
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.ActionType
 import com.arbhlabs.taprelay.domain.model.Brightness
+import com.arbhlabs.taprelay.domain.model.powerIntent
 import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.domain.model.TapError
@@ -99,20 +100,15 @@ class ActionExecutor(
 
         val finalTarget: Int
         try {
-            if (tag.actionType == ActionType.SET_BRIGHTNESS ||
-                tag.actionType == ActionType.SET_COLOR ||
-                tag.actionType == ActionType.SET_SCENE
-            ) {
-                finalTarget = Toggle.target(tag.actionType, tag.lastKnownState)
-                onFeedback(TapFeedback("${tag.friendlyName} • ${settingLabel(tag)}", isError = false, pending = true))
-            } else if (tag.actionType == ActionType.TOGGLE) {
+            val intent = tag.actionType.powerIntent()
+            if (intent == ActionType.TOGGLE) {
                 onFeedback(TapFeedback("${tag.friendlyName} • Updating…", isError = false, pending = true))
                 val real = provider.getPowerState(tag.deviceId, tag.deviceSku)
-                finalTarget = if (real != null) Toggle.inverseOf(real) else Toggle.target(tag.actionType, tag.lastKnownState)
+                finalTarget = if (real != null) Toggle.inverseOf(real) else Toggle.target(intent, tag.lastKnownState)
                 Log.i(TAG, "toggle provider=${tag.providerId} read=${real ?: "unknown"} sending=$finalTarget")
             } else {
-                finalTarget = Toggle.target(tag.actionType, tag.lastKnownState)
-                onFeedback(TapFeedback("${tag.friendlyName} • ${label(finalTarget)}", isError = false, pending = true))
+                finalTarget = Toggle.target(intent, tag.lastKnownState)
+                onFeedback(TapFeedback("${tag.friendlyName} • ${settingLabel(tag, finalTarget)}", isError = false, pending = true))
             }
 
             // Every light in the group follows the primary's decision, so they move together
@@ -180,24 +176,15 @@ class ActionExecutor(
 
     private fun label(state: Int) = if (state == 1) "On" else "Off"
 
-    /** What the tag is about to do, shown while the request is in flight. */
-    private fun settingLabel(tag: TagEntity) = when (tag.actionType) {
-        ActionType.SET_BRIGHTNESS ->
-            "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%…"
-        ActionType.SET_COLOR -> "${LightPresets.nameFor(tag.colorRgb ?: 0)}…"
-        ActionType.SET_SCENE ->
-            "${LightPresets.nameFor(tag.colorRgb ?: 0)} " +
-                "${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%…"
-        else -> "Updating…"
-    }
+    /** Describes whatever combination the tag carries, not a single fixed action. */
+    private fun settingLabel(tag: TagEntity, state: Int) = outcomeLabel(tag, state) + "…"
 
-    private fun outcomeLabel(tag: TagEntity, state: Int) = when (tag.actionType) {
-        ActionType.SET_BRIGHTNESS ->
-            "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
-        ActionType.SET_COLOR -> LightPresets.nameFor(tag.colorRgb ?: 0)
-        ActionType.SET_SCENE ->
-            "${LightPresets.nameFor(tag.colorRgb ?: 0)} " +
-                "${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
-        else -> label(state)
+    private fun outcomeLabel(tag: TagEntity, state: Int): String {
+        if (state != 1) return "Off"
+        val parts = buildList {
+            tag.colorRgb?.let { add(LightPresets.nameFor(it)) }
+            tag.brightnessPercent?.let { add("${Brightness.clampPercent(it)}%") }
+        }
+        return if (parts.isEmpty()) "On" else "On • " + parts.joinToString(" ")
     }
 }
