@@ -33,6 +33,15 @@ class TuyaProvider(
     private suspend fun credentials(): TuyaCredentials =
         inMemoryCreds ?: keys?.getTuyaCredentials()?.first() ?: throw TapException(TapError.AUTH_TUYA)
 
+    /**
+     * Drops the in-memory credential cache so a disconnect in the UI actually sticks.
+     * Without this, [isConnected] keeps returning true from the cache until the process
+     * dies and the next connection check silently re-enables the provider.
+     */
+    fun clearCredentials() {
+        inMemoryCreds = null
+    }
+
     suspend fun validateAndSave(creds: TuyaCredentials): Pair<List<DiscoveredDevice>, List<DiscoveredScene>> {
         val devices = api.getDevices(
             accessId = creds.accessId.trim(),

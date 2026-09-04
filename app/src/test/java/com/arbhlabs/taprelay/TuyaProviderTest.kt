@@ -183,5 +183,9 @@ class TuyaProviderTest {
 
         // Execute action TOGGLE
         provider.executeAction("lamp_corner", TargetType.DEVICE, cornerLamp.sku, ActionType.TOGGLE, 0)
+
+        // Disconnect must stick: clearing the in-memory cache drops the connection.
+        provider.clearCredentials()
+        assertTrue(!provider.isConnected())
     }
 }

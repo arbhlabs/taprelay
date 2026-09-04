@@ -82,21 +82,35 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     private val tuyaDeviceCount = MutableStateFlow(0)
     private val tuyaSceneCount = MutableStateFlow(0)
 
+    private data class Connections(
+        val goveeConnected: Boolean,
+        val goveeDeviceCount: Int,
+        val tuyaConnected: Boolean,
+        val tuyaDeviceCount: Int,
+        val tuyaSceneCount: Int
+    )
+
+    // All five connection signals feed the combine so the home screen updates when a
+    // device or scene count lands, not only when the connected flag flips.
+    private val connections = combine(
+        goveeConnected, goveeDeviceCount, tuyaConnected, tuyaDeviceCount, tuyaSceneCount
+    ) { gConn, gDevs, tConn, tDevs, tScenes ->
+        Connections(gConn, gDevs, tConn, tDevs, tScenes)
+    }
+
     val ui: StateFlow<HomeUiState> = combine(
         services.preferences.onboardingComplete,
         services.tagRepository.getAllTags(),
-        goveeConnected,
-        goveeDeviceCount,
-        tuyaConnected
-    ) { onboarded, tags, govee, gDevs, tuya ->
+        connections
+    ) { onboarded, tags, c ->
         HomeUiState(
             loading = false,
             onboardingComplete = onboarded,
-            goveeConnected = govee,
-            goveeDeviceCount = gDevs,
-            tuyaConnected = tuya,
-            tuyaDeviceCount = tuyaDeviceCount.value,
-            tuyaSceneCount = tuyaSceneCount.value,
+            goveeConnected = c.goveeConnected,
+            goveeDeviceCount = c.goveeDeviceCount,
+            tuyaConnected = c.tuyaConnected,
+            tuyaDeviceCount = c.tuyaDeviceCount,
+            tuyaSceneCount = c.tuyaSceneCount,
             tags = tags
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
@@ -120,7 +134,6 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshConnections() = viewModelScope.launch {
         val gConn = services.goveeProvider.isConnected()
-        goveeConnected.value = gConn
         if (gConn) {
             runCatching {
                 val devs = services.goveeProvider.discoverDevices()
@@ -129,9 +142,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             goveeDeviceCount.value = 0
         }
+        goveeConnected.value = gConn
 
         val tConn = services.tuyaProvider.isConnected()
-        tuyaConnected.value = tConn
         if (tConn) {
             runCatching {
                 val devs = services.tuyaProvider.discoverDevices()
@@ -143,6 +156,7 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             tuyaDeviceCount.value = 0
             tuyaSceneCount.value = 0
         }
+        tuyaConnected.value = tConn
     }
 
     // ---- Onboarding / provider ----
@@ -219,6 +233,7 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnectTuya() = viewModelScope.launch {
         services.secureKeyStorage.clearTuyaCredentials()
+        services.tuyaProvider.clearCredentials()
         tuyaConnected.value = false
         tuyaDeviceCount.value = 0
         tuyaSceneCount.value = 0

@@ -3,23 +3,27 @@
 TapRelay is published as a **private alpha** on arbhlabs.com through the standard ARBH Labs
 release pipeline. The disclaimer copy below is required on the download page and is live there.
 
-## Current release — v0.0.4 (2026-09-04)
+## Current release — v0.0.9 (2026-09-04)
 
-- `TapRelay-v0.0.4.apk` — signed release, SHA-256
-  `026e57e485da904214f7ecd1c5568916ad27f186a8801cf518add8915ef98772`, 6,757,226 bytes
-- `TapRelay-v0.0.4.apk.sha256`, `release-metadata.json`, `../docs/QA-v0.0.4.md`
-- Screenshots: `screenshot-home.png`, `screenshot-addtag.png`, `screenshot-about.png`,
-  `screenshot-devices-v0.0.4.png`
+- `TapRelay-v0.0.9.apk` — signed release, SHA-256
+  `1acb95d8db2c324c5c856b56e7e7aac05912de4ed840fdd1a5a879a7fefcdf66`, 6,822,794 bytes,
+  versionCode 9
+- `TapRelay-v0.0.9.apk.sha256`, `release-metadata.json`, `../docs/QA-v0.0.9.md`
+- Reliability polish only: fixed a stale Smart Life device/scene count on the home screen and
+  a "Disconnect Smart Life" that did not take effect until the app was closed. No schema change.
 
-Live URLs (all serve the exact bytes above, verified by download):
+Live URLs (all serve the exact bytes above, verify by download):
 - https://arbhlabs.com/taprelay/
-- https://arbhlabs.com/downloads/TapRelay-0.0.4.apk
+- https://arbhlabs.com/downloads/TapRelay-0.0.9.apk
 - https://arbhlabs.com/downloads/TapRelay.apk
 - https://arbhlabs.com/downloads/TapRelay-latest.apk
 
 R2 objects in `arbh-releases`:
-- `taprelay/releases/0.0.4/TapRelay-0.0.4.apk` (immutable)
+- `taprelay/releases/0.0.9/TapRelay-0.0.9.apk` (immutable)
 - `taprelay/latest/TapRelay.apk`, `taprelay/latest/TapRelay-latest.apk` (aliases)
+
+### Prior releases
+0.0.8 (vc8), 0.0.7 (vc7), 0.0.6 (vc6), 0.0.5 (vc5), 0.0.4 (vc4), 0.0.2 (vc2) — see git tags and `../docs/`.
 
 ## Publish steps (from the ARBH-Labs-Website repo root)
 

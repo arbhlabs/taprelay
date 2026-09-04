@@ -1,5 +1,23 @@
 # TapRelay Changelog
 
+## v0.0.9 - 2026-09-04 (Alpha / Internal Test)
+
+**Reliability polish.** No new features — two fixes to things that quietly did the wrong thing.
+
+### Fixed
+- **The home screen now shows the real Smart Life device and scene counts.** After connecting
+  Smart Life, the card could stay stuck on "Connected • 0 devices • 0 scenes" because those
+  numbers were read once and never allowed to update when discovery finished a moment later.
+  The Govee count already updated correctly; now Smart Life matches.
+- **Disconnecting Smart Life now sticks.** "Disconnect" cleared the stored credentials but left
+  a copy cached in memory, so the app still believed it was connected — the next connection
+  check would silently turn it back on until the app was fully closed. The cache is now cleared
+  too.
+
+### Unchanged
+- The sticker still stores only the opaque App Link. Tags saved by 0.0.5 to 0.0.8 keep working.
+- Private alpha. Not affiliated with Govee, Tuya, Smart Life or Google.
+
 ## v0.0.8 - 2026-09-04 (Alpha / Internal Test)
 
 **Actions now combine.** Power, colour and brightness were three choices where you could only
