@@ -23,8 +23,8 @@ android {
         applicationId = "com.arbhlabs.taprelay"
         minSdk = 30
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.0.10"
+        versionCode = 11
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -61,7 +61,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     testOptions {
         unitTests {

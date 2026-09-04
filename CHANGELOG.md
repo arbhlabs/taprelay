@@ -1,5 +1,11 @@
 # TapRelay Changelog
 
+## v0.1.0 - 2026-09-04 (Alpha / Internal Test)
+
+First 0.1 tag. Rolls up everything in 0.0.10 (brightness keeps the light's colour; the 22-colour
+palette and the warm-to-cool white slider) and fixes the version shown in **About TapRelay**,
+which was still hard-coded to 0.0.8. It now reads the real build version, so it can't drift again.
+
 ## v0.0.10 - 2026-09-04 (Alpha / Internal Test)
 
 **Colour polish.** A brightness tap no longer steals your colour, and the colour picker grew up.

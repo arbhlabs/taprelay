@@ -3,28 +3,28 @@
 TapRelay is published as a **private alpha** on arbhlabs.com through the standard ARBH Labs
 release pipeline. The disclaimer copy below is required on the download page and is live there.
 
-## Current release — v0.0.10 (2026-09-04)
+## Current release — v0.1.0 (2026-09-04)
 
-- `TapRelay-v0.0.10.apk` — signed release, SHA-256
-  `bf8fe48b8a671fc74aa5303ddd171d227f3357f80c7dffdc08208b2b1f93488a`, 6,839,182 bytes,
-  versionCode 10
-- `TapRelay-v0.0.10.apk.sha256`, `release-metadata.json`, `../docs/QA-v0.0.10.md`
-- Colour polish: brightness-only tags no longer knock Smart Life bulbs to white / wipe the
-  colour set elsewhere; 22 spectrum colours + a Whites tab with an 1800–6500 K slider. Gradients
+- `TapRelay-v0.1.0.apk` — signed release, SHA-256
+  `812e5ef5a421eee92bd282503f2aeb5f9772ef8830fc0b9cdbdbae0006c92837`, 6,839,178 bytes,
+  versionCode 11
+- `TapRelay-v0.1.0.apk.sha256`, `release-metadata.json`, `../docs/QA-v0.1.0.md`
+- Colour polish: About screen now shows the real build version (was hard-coded to 0.0.8); rolls up 0.0.10 (brightness
+  keeps the bulb colour on Smart Life, 22 colours + white-temperature slider). Gradients
   deferred (needs segmented hardware). No schema change.
 
 Live URLs (all serve the exact bytes above, verify by download):
 - https://arbhlabs.com/taprelay/
-- https://arbhlabs.com/downloads/TapRelay-0.0.10.apk
+- https://arbhlabs.com/downloads/TapRelay-0.1.0.apk
 - https://arbhlabs.com/downloads/TapRelay.apk
 - https://arbhlabs.com/downloads/TapRelay-latest.apk
 
 R2 objects in `arbh-releases`:
-- `taprelay/releases/0.0.10/TapRelay-0.0.10.apk` (immutable)
+- `taprelay/releases/0.1.0/TapRelay-0.1.0.apk` (immutable)
 - `taprelay/latest/TapRelay.apk`, `taprelay/latest/TapRelay-latest.apk` (aliases)
 
 ### Prior releases
-0.0.9 (vc9), 0.0.8 (vc8), 0.0.7 (vc7), 0.0.6 (vc6), 0.0.5 (vc5), 0.0.4 (vc4), 0.0.2 (vc2) — see git tags and `../docs/`.
+0.0.10 (vc10), 0.0.9 (vc9), 0.0.8 (vc8), 0.0.7 (vc7), 0.0.6 (vc6), 0.0.5 (vc5), 0.0.4 (vc4), 0.0.2 (vc2) — see git tags and `../docs/`.
 
 ## Publish steps (from the ARBH-Labs-Website repo root)
 

@@ -962,7 +962,10 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text("About TapRelay") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TapRelay by ARBH Labs — version 0.0.8 (alpha).", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "TapRelay by ARBH Labs — version ${com.arbhlabs.taprelay.BuildConfig.VERSION_NAME} (alpha).",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 Text(
                     "This is an early internal test build. Things may change or break.",
                     style = MaterialTheme.typography.bodySmall,

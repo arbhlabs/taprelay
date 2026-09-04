@@ -2,24 +2,25 @@
   "product": "TapRelay",
   "vendor": "ARBH Labs",
   "channel": "alpha",
-  "versionName": "0.0.10",
-  "versionCode": 10,
+  "versionName": "0.1.0",
+  "versionCode": 11,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
   "date": "2026-09-04",
-  "artifact": "TapRelay-v0.0.10.apk",
-  "sha256": "bf8fe48b8a671fc74aa5303ddd171d227f3357f80c7dffdc08208b2b1f93488a",
-  "sizeBytes": 6839182,
+  "artifact": "TapRelay-v0.1.0.apk",
+  "sha256": "812e5ef5a421eee92bd282503f2aeb5f9772ef8830fc0b9cdbdbae0006c92837",
+  "sizeBytes": 6839178,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
     "schemes": "v2 (APK Signature Scheme v2)",
     "certSubject": "CN=ARBH Labs, OU=TapRelay, O=ARBH Labs, C=US",
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
-  "changeSummary": "Colour polish. Fixed a brightness-only tag forcing Smart Life bulbs to white mode and wiping the colour set elsewhere (e.g. Google Home); a brightness tap now moves only the value channel when the light is in colour mode. Added 22 spectrum colours plus a Whites tab with six white points and an 1800-6500 K temperature slider (stored as plain RGB, no new capability). Gradients deferred: needs segmented hardware not available to test.",
+  "changeSummary": "First 0.1 tag. Rolls up 0.0.10 (brightness keeps the bulb's colour on Smart Life; 22-colour palette + warm-to-cool white slider) and fixes the About screen, which was hard-coded to version 0.0.8 - it now reads BuildConfig.VERSION_NAME.",
   "verifiedOnPixel7": [
-    "pending owner on-device pass for 0.0.10"
+    "adb install -r over 0.0.8: Success; on-device base.apk SHA-256 matches the released artifact; app launches to MainActivity with no crash",
+    "About TapRelay now shows the installed version"
   ],
   "codePathVerified": [
     "TuyaProvider.setBrightness reads work_mode: in colour mode it re-sends colour_data with the stored h/s and only a new v, and sends neither work_mode nor bright_value (LightCommandPayloadTest)",
@@ -44,6 +45,6 @@
     "matter": "not implemented",
     "gradients": "deferred - requires a light with addressable segments"
   },
-  "tests": "71 unit tests, 0 failures (./gradlew testReleaseUnitTest)",
+  "tests": "71 unit tests, 0 failures",
   "publicDistribution": "private alpha - keep the alpha + non-affiliation disclaimer visible"
 }
