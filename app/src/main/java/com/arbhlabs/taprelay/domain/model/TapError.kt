@@ -16,6 +16,7 @@ enum class TapError(val message: String) {
     TAG_UNSUPPORTED("This tag is not supported by TapRelay."),
     TAG_TOO_SMALL("This tag doesn't have enough space."),
     AUTH_TUYA("Your Smart Life connection needs to be reconnected."),
+    AUTH_SENSIBO("Your Sensibo connection needs to be reconnected."),
     PROVIDER_UNAVAILABLE("That smart-home service isn't connected."),
     UNSUPPORTED_ACTION("This light can't do that. Pick a different action for this tag."),
     SERVER("The service is having a brief hiccup. Try again shortly."),

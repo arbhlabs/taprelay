@@ -20,6 +20,11 @@ class SecureKeyStorage(
     private val TUYA_ACCESS_SECRET = stringPreferencesKey("tuya_access_secret")
     private val TUYA_REGION = stringPreferencesKey("tuya_region")
     private val TUYA_UID = stringPreferencesKey("tuya_uid")
+    private val SENSIBO_API_KEY = stringPreferencesKey("sensibo_api_key")
+    private val PRO_KEY = stringPreferencesKey("pro_key")
+    private val PRO_TIER = stringPreferencesKey("pro_tier")
+    private val PRO_EXPIRES = stringPreferencesKey("pro_expires")
+    private val PRO_SIG = stringPreferencesKey("pro_sig")
 
     fun getGoveeApiKey(): Flow<String?> {
         return context.dataStore.data.map { preferences ->
@@ -86,7 +91,80 @@ class SecureKeyStorage(
             preferences.remove(TUYA_UID)
         }
     }
+
+    fun getSensiboApiKey(): Flow<String?> {
+        return context.dataStore.data.map { preferences ->
+            preferences[SENSIBO_API_KEY]?.let { encryptedKey ->
+                try {
+                    aeadManager.decrypt(encryptedKey)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
+    }
+
+    suspend fun saveSensiboApiKey(apiKey: String) {
+        val encryptedKey = aeadManager.encrypt(apiKey)
+        context.dataStore.edit { preferences ->
+            preferences[SENSIBO_API_KEY] = encryptedKey
+        }
+    }
+
+    suspend fun clearSensiboApiKey() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(SENSIBO_API_KEY)
+        }
+    }
+
+    fun getProLicense(): Flow<ProLicense?> {
+        return context.dataStore.data.map { preferences ->
+            val keyEnc = preferences[PRO_KEY] ?: return@map null
+            val tierEnc = preferences[PRO_TIER]
+            val expEnc = preferences[PRO_EXPIRES]
+            val sigEnc = preferences[PRO_SIG] ?: return@map null
+            try {
+                ProLicense(
+                    licenseKey = aeadManager.decrypt(keyEnc),
+                    tier = tierEnc?.let { aeadManager.decrypt(it) } ?: "pro",
+                    expiresAt = expEnc?.let { aeadManager.decrypt(it).toLongOrNull() } ?: 0L,
+                    signature = aeadManager.decrypt(sigEnc)
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    suspend fun saveProLicense(license: ProLicense) {
+        val keyEnc = aeadManager.encrypt(license.licenseKey)
+        val tierEnc = aeadManager.encrypt(license.tier)
+        val expEnc = aeadManager.encrypt(license.expiresAt.toString())
+        val sigEnc = aeadManager.encrypt(license.signature)
+        context.dataStore.edit { preferences ->
+            preferences[PRO_KEY] = keyEnc
+            preferences[PRO_TIER] = tierEnc
+            preferences[PRO_EXPIRES] = expEnc
+            preferences[PRO_SIG] = sigEnc
+        }
+    }
+
+    suspend fun clearProLicense() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(PRO_KEY)
+            preferences.remove(PRO_TIER)
+            preferences.remove(PRO_EXPIRES)
+            preferences.remove(PRO_SIG)
+        }
+    }
 }
+
+data class ProLicense(
+    val licenseKey: String,
+    val tier: String = "pro",
+    val expiresAt: Long = 0L,
+    val signature: String = ""
+)
 
 data class TuyaCredentials(
     val accessId: String,

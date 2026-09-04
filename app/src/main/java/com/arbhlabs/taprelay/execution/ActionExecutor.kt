@@ -12,11 +12,16 @@ import com.arbhlabs.taprelay.domain.model.Toggle
 import com.arbhlabs.taprelay.domain.model.TapException
 import com.arbhlabs.taprelay.domain.provider.SmartHomeProvider
 import com.arbhlabs.taprelay.domain.repository.TagRepository
+import com.arbhlabs.taprelay.data.local.dao.TapLogDao
+import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
+import com.arbhlabs.taprelay.monetization.EntitlementRepository
+import com.arbhlabs.taprelay.monetization.TapRelayProFeature
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalTime
 
 data class TapFeedback(
     val title: String,
@@ -33,6 +38,8 @@ class ActionExecutor(
     private val providers: () -> Map<String, SmartHomeProvider>,
     private val haptics: HapticsManager,
     private val debounceMs: Long = 1500L,
+    private val tapLogDao: TapLogDao? = null,
+    private val entitlements: EntitlementRepository? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     private val lastFired = HashMap<String, Long>()
@@ -52,19 +59,46 @@ class ActionExecutor(
         scope.launch { run(tagId, onFeedback) }
     }
 
+    /** 1-tap instant replay from diagnostics log (bypasses NFC debounce). */
+    fun replay(tagId: String, onFeedback: (TapFeedback) -> Unit) {
+        scope.launch { run(tagId, onFeedback) }
+    }
+
     private suspend fun run(tagId: String, onFeedback: (TapFeedback) -> Unit) {
-        val tag = tags.getTagById(tagId)
-        if (tag == null) {
+        val startTime = System.currentTimeMillis()
+        val rawTag = tags.getTagById(tagId)
+        if (rawTag == null) {
             haptics.vibrateError()
             onFeedback(TapFeedback(TapError.TAG_UNREGISTERED.message, isError = true))
             return
         }
-        if (!tag.enabled) {
+        if (!rawTag.enabled) {
             haptics.vibrateError()
-            onFeedback(TapFeedback("${tag.friendlyName} is turned off in the app.", isError = true))
+            onFeedback(TapFeedback("${rawTag.friendlyName} is turned off in the app.", isError = true))
             return
         }
         haptics.vibrateClick()
+
+        // Pro: Context-aware time-of-day condition evaluation
+        val tag = if (rawTag.timeConditionEnabled && (entitlements == null || entitlements.canAccess(TapRelayProFeature.TIME_OF_DAY_CONDITIONS))) {
+            val localTime = LocalTime.now()
+            val currentMinutes = localTime.hour * 60 + localTime.minute
+            val startMinutes = (rawTag.startHour ?: 0) * 60 + (rawTag.startMinute ?: 0)
+            val endMinutes = (rawTag.endHour ?: 24) * 60 + (rawTag.endMinute ?: 0)
+            val inWindow = if (startMinutes <= endMinutes) {
+                currentMinutes in startMinutes until endMinutes
+            } else {
+                currentMinutes >= startMinutes || currentMinutes < endMinutes
+            }
+            if (inWindow) {
+                rawTag
+            } else {
+                val alt = rawTag.offActionType ?: ActionType.TURN_OFF
+                rawTag.copy(actionType = alt, brightnessPercent = if (alt == ActionType.TURN_OFF) null else rawTag.brightnessPercent)
+            }
+        } else {
+            rawTag
+        }
 
         val provider = providers()[tag.providerId]
         if (provider == null) {
@@ -84,14 +118,49 @@ class ActionExecutor(
                     targetState = 1
                 )
                 tags.updateStateAndTimestamp(tag.tagId, 1, System.currentTimeMillis())
+                val duration = System.currentTimeMillis() - startTime
+                tapLogDao?.insert(
+                    TapLogEntity(
+                        tagId = tag.tagId,
+                        tagName = tag.friendlyName,
+                        providerId = tag.providerId,
+                        actionDescription = "Scene started",
+                        success = true,
+                        durationMs = duration
+                    )
+                )
                 withContext(Dispatchers.Main) {
                     haptics.vibrateSuccess()
                     onFeedback(TapFeedback("${tag.friendlyName} • Scene started", isError = false))
                 }
             } catch (e: TapException) {
+                val duration = System.currentTimeMillis() - startTime
+                tapLogDao?.insert(
+                    TapLogEntity(
+                        tagId = tag.tagId,
+                        tagName = tag.friendlyName,
+                        providerId = tag.providerId,
+                        actionDescription = "Scene failed",
+                        success = false,
+                        errorMessage = e.error.message,
+                        durationMs = duration
+                    )
+                )
                 haptics.vibrateError()
                 onFeedback(TapFeedback(e.error.message, isError = true))
             } catch (e: Exception) {
+                val duration = System.currentTimeMillis() - startTime
+                tapLogDao?.insert(
+                    TapLogEntity(
+                        tagId = tag.tagId,
+                        tagName = tag.friendlyName,
+                        providerId = tag.providerId,
+                        actionDescription = "Scene failed",
+                        success = false,
+                        errorMessage = TapError.UNKNOWN.message,
+                        durationMs = duration
+                    )
+                )
                 haptics.vibrateError()
                 onFeedback(TapFeedback(TapError.UNKNOWN.message, isError = true))
             }
@@ -111,8 +180,7 @@ class ActionExecutor(
                 onFeedback(TapFeedback("${tag.friendlyName} • ${settingLabel(tag, finalTarget)}", isError = false, pending = true))
             }
 
-            // Every light in the group follows the primary's decision, so they move together
-            // instead of drifting apart when one of them was changed elsewhere.
+            // Pro: Multi-target routine execution (or unified group)
             val targets = tag.allTargets
             var succeeded = 0
             var firstFailure: TapException? = null
@@ -123,14 +191,26 @@ class ActionExecutor(
                     continue
                 }
                 try {
+                    val isRoutineStep = target.actionType != null &&
+                        (entitlements == null || entitlements.canAccess(TapRelayProFeature.MULTI_DEVICE_ROUTINES))
+
+                    val stepAction = if (isRoutineStep) target.actionType!! else tag.actionType
+                    val stepBrightness = if (isRoutineStep) target.brightnessPercent else tag.brightnessPercent
+                    val stepColor = if (isRoutineStep) target.colorRgb else tag.colorRgb
+                    val stepState = if (isRoutineStep) {
+                        Toggle.target(stepAction.powerIntent(), finalTarget)
+                    } else {
+                        finalTarget
+                    }
+
                     p.executeAction(
                         targetId = target.deviceId,
                         targetType = TargetType.DEVICE,
                         sku = target.sku,
-                        action = tag.actionType,
-                        targetState = finalTarget,
-                        brightnessPercent = tag.brightnessPercent,
-                        colorRgb = tag.colorRgb
+                        action = stepAction,
+                        targetState = stepState,
+                        brightnessPercent = stepBrightness,
+                        colorRgb = stepColor
                     )
                     succeeded++
                 } catch (e: TapException) {
@@ -143,14 +223,26 @@ class ActionExecutor(
             if (succeeded == 0) throw firstFailure ?: TapException(TapError.UNKNOWN)
 
             tags.updateStateAndTimestamp(tag.tagId, finalTarget, System.currentTimeMillis())
+            val duration = System.currentTimeMillis() - startTime
+            val outcome = outcomeLabel(tag, finalTarget)
+            tapLogDao?.insert(
+                TapLogEntity(
+                    tagId = tag.tagId,
+                    tagName = tag.friendlyName,
+                    providerId = tag.providerId,
+                    actionDescription = outcome,
+                    success = true,
+                    durationMs = duration
+                )
+            )
+
             Log.i(
                 TAG,
                 "ok provider=${tag.providerId} action=${tag.actionType} state=$finalTarget " +
-                    "lights=$succeeded/${targets.size}"
+                    "targets=$succeeded/${targets.size} (${duration}ms)"
             )
             withContext(Dispatchers.Main) {
                 haptics.vibrateSuccess()
-                val outcome = outcomeLabel(tag, finalTarget)
                 val text = if (succeeded < targets.size) {
                     "${tag.friendlyName} • $outcome ($succeeded of ${targets.size})"
                 } else {
@@ -159,11 +251,35 @@ class ActionExecutor(
                 onFeedback(TapFeedback(text, isError = false))
             }
         } catch (e: TapException) {
+            val duration = System.currentTimeMillis() - startTime
+            tapLogDao?.insert(
+                TapLogEntity(
+                    tagId = tag.tagId,
+                    tagName = tag.friendlyName,
+                    providerId = tag.providerId,
+                    actionDescription = "Failed",
+                    success = false,
+                    errorMessage = e.error.message,
+                    durationMs = duration
+                )
+            )
             Log.w(TAG, "failed provider=${tag.providerId} error=${e.error.name}")
             revert(tag.tagId, tag.lastKnownState)
             haptics.vibrateError()
             onFeedback(TapFeedback(e.error.message, isError = true))
         } catch (e: Exception) {
+            val duration = System.currentTimeMillis() - startTime
+            tapLogDao?.insert(
+                TapLogEntity(
+                    tagId = tag.tagId,
+                    tagName = tag.friendlyName,
+                    providerId = tag.providerId,
+                    actionDescription = "Failed",
+                    success = false,
+                    errorMessage = TapError.UNKNOWN.message,
+                    durationMs = duration
+                )
+            )
             Log.w(TAG, "failed provider=${tag.providerId} error=unexpected")
             revert(tag.tagId, tag.lastKnownState)
             haptics.vibrateError()

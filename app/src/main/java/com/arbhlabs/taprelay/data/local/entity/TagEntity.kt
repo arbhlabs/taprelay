@@ -34,7 +34,14 @@ data class TagEntity(
     val lastKnownState: Int = 1,
     val createdAt: Long = System.currentTimeMillis(),
     val modifiedAt: Long = System.currentTimeMillis(),
-    val lastTriggeredAt: Long? = null
+    val lastTriggeredAt: Long? = null,
+    /** Pro: Context-aware time-of-day condition window. */
+    val timeConditionEnabled: Boolean = false,
+    val startHour: Int? = null,
+    val startMinute: Int? = null,
+    val endHour: Int? = null,
+    val endMinute: Int? = null,
+    val offActionType: ActionType? = null
 ) {
     /** Every light this tag drives, primary first. */
     val allTargets: List<TagTarget>

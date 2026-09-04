@@ -11,5 +11,9 @@ data class TagTarget(
     val providerId: String,
     val deviceId: String,
     val sku: String,
-    val name: String = ""
+    val name: String = "",
+    /** If set, this target runs its own action instead of following the primary. */
+    val actionType: ActionType? = null,
+    val brightnessPercent: Int? = null,
+    val colorRgb: Int? = null
 )

@@ -17,14 +17,19 @@ import com.arbhlabs.taprelay.domain.model.TapException
 import com.arbhlabs.taprelay.domain.model.TagTarget
 import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
+import com.arbhlabs.taprelay.domain.provider.SENSIBO_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.execution.TapFeedback
+import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
+import com.arbhlabs.taprelay.monetization.TapRelayProFeature
 import com.arbhlabs.taprelay.nfc.NfcPayloadParser
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -63,7 +68,14 @@ data class WizardState(
     val name: String = "",
     val iconKey: String = "lamp",
     val error: String? = null,
-    val busy: Boolean = false
+    val busy: Boolean = false,
+    /** Pro: Context-aware time-of-day condition window. */
+    val timeConditionEnabled: Boolean = false,
+    val startHour: Int = 8,
+    val startMinute: Int = 0,
+    val endHour: Int = 22,
+    val endMinute: Int = 0,
+    val offActionType: ActionType = ActionType.TURN_OFF
 )
 
 data class HomeUiState(
@@ -74,6 +86,11 @@ data class HomeUiState(
     val tuyaConnected: Boolean = false,
     val tuyaDeviceCount: Int = 0,
     val tuyaSceneCount: Int = 0,
+    val sensiboConnected: Boolean = false,
+    val sensiboDeviceCount: Int = 0,
+    val isPro: Boolean = false,
+    val isTrialActive: Boolean = false,
+    val trialDaysRemaining: Int = 0,
     val tags: List<TagEntity> = emptyList()
 )
 
@@ -86,28 +103,53 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     private val tuyaConnected = MutableStateFlow(false)
     private val tuyaDeviceCount = MutableStateFlow(0)
     private val tuyaSceneCount = MutableStateFlow(0)
+    private val sensiboConnected = MutableStateFlow(false)
+    private val sensiboDeviceCount = MutableStateFlow(0)
 
     private data class Connections(
         val goveeConnected: Boolean,
         val goveeDeviceCount: Int,
         val tuyaConnected: Boolean,
         val tuyaDeviceCount: Int,
-        val tuyaSceneCount: Int
+        val tuyaSceneCount: Int,
+        val sensiboConnected: Boolean,
+        val sensiboDeviceCount: Int
     )
 
-    // All five connection signals feed the combine so the home screen updates when a
-    // device or scene count lands, not only when the connected flag flips.
-    private val connections = combine(
-        goveeConnected, goveeDeviceCount, tuyaConnected, tuyaDeviceCount, tuyaSceneCount
-    ) { gConn, gDevs, tConn, tDevs, tScenes ->
-        Connections(gConn, gDevs, tConn, tDevs, tScenes)
+    val isPro: StateFlow<Boolean> = services.entitlementRepository.isPro
+    val proLicense = services.entitlementRepository.proLicense
+
+    val tapLogs: Flow<List<TapLogEntity>> = services.tapLogDao.getRecentLogs()
+
+    private val goveeState = combine(goveeConnected, goveeDeviceCount) { c, d -> c to d }
+    private val tuyaState = combine(tuyaConnected, tuyaDeviceCount, tuyaSceneCount) { c, d, s -> Triple(c, d, s) }
+    private val sensiboState = combine(sensiboConnected, sensiboDeviceCount) { c, d -> c to d }
+
+    private val connections = combine(goveeState, tuyaState, sensiboState) { g, t, s ->
+        Connections(
+            goveeConnected = g.first,
+            goveeDeviceCount = g.second,
+            tuyaConnected = t.first,
+            tuyaDeviceCount = t.second,
+            tuyaSceneCount = t.third,
+            sensiboConnected = s.first,
+            sensiboDeviceCount = s.second
+        )
     }
 
     val ui: StateFlow<HomeUiState> = combine(
         services.preferences.onboardingComplete,
         services.tagRepository.getAllTags(),
-        connections
-    ) { onboarded, tags, c ->
+        connections,
+        isPro,
+        proLicense
+    ) { onboarded, tags, c, pro, lic ->
+        val trialActive = lic != null && lic.tier == "trial" && (lic.expiresAt == 0L || lic.expiresAt > System.currentTimeMillis())
+        val daysRemaining = if (trialActive && lic != null) {
+            val diff = lic.expiresAt - System.currentTimeMillis()
+            val oneDayMs = 1000L * 60L * 60L * 24L
+            if (diff > 0L) ((diff + oneDayMs - 1L) / oneDayMs).toInt() else 0
+        } else 0
         HomeUiState(
             loading = false,
             onboardingComplete = onboarded,
@@ -116,6 +158,11 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             tuyaConnected = c.tuyaConnected,
             tuyaDeviceCount = c.tuyaDeviceCount,
             tuyaSceneCount = c.tuyaSceneCount,
+            sensiboConnected = c.sensiboConnected,
+            sensiboDeviceCount = c.sensiboDeviceCount,
+            isPro = pro,
+            isTrialActive = trialActive,
+            trialDaysRemaining = daysRemaining,
             tags = tags
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
@@ -162,6 +209,17 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             tuyaSceneCount.value = 0
         }
         tuyaConnected.value = tConn
+
+        val sConn = services.sensiboProvider.isConnected()
+        if (sConn) {
+            runCatching {
+                val pods = services.sensiboProvider.discoverDevices()
+                sensiboDeviceCount.value = pods.size
+            }
+        } else {
+            sensiboDeviceCount.value = 0
+        }
+        sensiboConnected.value = sConn
     }
 
     // ---- Onboarding / provider ----
@@ -228,6 +286,24 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun connectSensibo(apiKey: String) = viewModelScope.launch {
+        if (apiKey.isBlank()) {
+            _connectState.value = ConnectState.Error("Paste your Sensibo API key to continue.")
+            return@launch
+        }
+        _connectState.value = ConnectState.Validating
+        try {
+            val pods = services.sensiboProvider.validateAndSave(apiKey)
+            sensiboConnected.value = true
+            sensiboDeviceCount.value = pods.size
+            _connectState.value = ConnectState.Success("Sensibo", pods.size)
+        } catch (e: TapException) {
+            _connectState.value = ConnectState.Error(e.error.message)
+        } catch (e: Exception) {
+            _connectState.value = ConnectState.Error("Couldn't reach Sensibo. Check your connection.")
+        }
+    }
+
     fun resetConnectState() { _connectState.value = ConnectState.Idle }
 
     fun disconnectGovee() = viewModelScope.launch {
@@ -242,6 +318,32 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         tuyaConnected.value = false
         tuyaDeviceCount.value = 0
         tuyaSceneCount.value = 0
+    }
+
+    fun disconnectSensibo() = viewModelScope.launch {
+        services.secureKeyStorage.clearSensiboApiKey()
+        sensiboConnected.value = false
+        sensiboDeviceCount.value = 0
+    }
+
+    // ---- Monetization & Diagnostics ----
+
+    fun activateLicense(key: String, onResult: (Result<String>) -> Unit) = viewModelScope.launch {
+        val res = services.entitlementRepository.activateLicense(key)
+        onResult(res)
+    }
+
+    fun startFreeTrial(onResult: (Result<String>) -> Unit) = viewModelScope.launch {
+        val res = services.entitlementRepository.startFreeTrial()
+        onResult(res)
+    }
+
+    fun deactivateLicense() = viewModelScope.launch {
+        services.entitlementRepository.deactivate()
+    }
+
+    fun replay(tagId: String) = viewModelScope.launch {
+        services.actionExecutor.replay(tagId) { fb -> _pill.value = fb }
     }
 
     // ---- Add-tag wizard ----
@@ -301,7 +403,13 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             wantsBrightness = existing?.brightnessPercent != null,
             pendingTargetIds = existing?.allTargets?.map { it.deviceId } ?: emptyList(),
             name = existing?.friendlyName ?: "",
-            iconKey = existing?.iconKey ?: "lamp"
+            iconKey = existing?.iconKey ?: "lamp",
+            timeConditionEnabled = existing?.timeConditionEnabled ?: false,
+            startHour = existing?.startHour ?: 8,
+            startMinute = existing?.startMinute ?: 0,
+            endHour = existing?.endHour ?: 22,
+            endMinute = existing?.endMinute ?: 0,
+            offActionType = existing?.offActionType ?: ActionType.TURN_OFF
         )
         discoverDevicesAndScenes()
     }
@@ -326,7 +434,13 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             wantsBrightness = tag.brightnessPercent != null,
             pendingTargetIds = tag.allTargets.map { it.deviceId },
             name = tag.friendlyName,
-            iconKey = tag.iconKey
+            iconKey = tag.iconKey,
+            timeConditionEnabled = tag.timeConditionEnabled,
+            startHour = tag.startHour ?: 8,
+            startMinute = tag.startMinute ?: 0,
+            endHour = tag.endHour ?: 22,
+            endMinute = tag.endMinute ?: 0,
+            offActionType = tag.offActionType ?: ActionType.TURN_OFF
         )
         discoverDevicesAndScenes()
     }
@@ -353,6 +467,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                     allDevices.addAll(services.tuyaProvider.discoverDevices())
                     allScenes.addAll(services.tuyaProvider.discoverScenes())
                 }
+            }
+            if (services.sensiboProvider.isConnected()) {
+                runCatching { allDevices.addAll(services.sensiboProvider.discoverDevices()) }
             }
 
             val wanted = _wizard.value.pendingTargetIds
@@ -469,6 +586,14 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         val id = w.tagId ?: return@launch
         _wizard.value = w.copy(busy = true)
         val existing = services.tagRepository.getTagById(id)
+        val currentTags = services.tagRepository.getAllTags().first()
+        if (existing == null && currentTags.size >= 5 && !services.entitlementRepository.canAccess(TapRelayProFeature.MULTI_DEVICE_ROUTINES)) {
+            _wizard.value = w.copy(
+                busy = false,
+                error = "Free tier limit reached (5 active tags). Upgrade to Pro or start your 7-day free trial for unlimited tags."
+            )
+            return@launch
+        }
 
         val entity = if (w.targetType == TargetType.SCENE) {
             val scene = w.scene ?: return@launch
@@ -489,6 +614,12 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 providerId = scene.providerId,
                 actionType = ActionType.RUN_SCENE,
                 targetType = TargetType.SCENE,
+                timeConditionEnabled = w.timeConditionEnabled,
+                startHour = if (w.timeConditionEnabled) w.startHour else null,
+                startMinute = if (w.timeConditionEnabled) w.startMinute else null,
+                endHour = if (w.timeConditionEnabled) w.endHour else null,
+                endMinute = if (w.timeConditionEnabled) w.endMinute else null,
+                offActionType = if (w.timeConditionEnabled) w.offActionType else null,
                 modifiedAt = System.currentTimeMillis()
             )
         } else {
@@ -517,12 +648,35 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 brightnessPercent = w.brightnessPercent.takeIf { w.wantsBrightness },
                 colorRgb = w.colorRgb.takeIf { w.wantsColor },
                 additionalTargets = extras,
+                timeConditionEnabled = w.timeConditionEnabled,
+                startHour = if (w.timeConditionEnabled) w.startHour else null,
+                startMinute = if (w.timeConditionEnabled) w.startMinute else null,
+                endHour = if (w.timeConditionEnabled) w.endHour else null,
+                endMinute = if (w.timeConditionEnabled) w.endMinute else null,
+                offActionType = if (w.timeConditionEnabled) w.offActionType else null,
                 modifiedAt = System.currentTimeMillis()
             )
         }
 
         services.tagRepository.upsert(entity)
         _wizard.value = _wizard.value.copy(busy = false, step = WizardStep.DONE)
+    }
+
+    fun setTimeConditionEnabled(enabled: Boolean) {
+        _wizard.value = _wizard.value.copy(timeConditionEnabled = enabled)
+    }
+
+    fun setTimeWindow(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int) {
+        _wizard.value = _wizard.value.copy(
+            startHour = startHour,
+            startMinute = startMinute,
+            endHour = endHour,
+            endMinute = endMinute
+        )
+    }
+
+    fun setOffActionType(action: ActionType) {
+        _wizard.value = _wizard.value.copy(offActionType = action)
     }
 
     // ---- Tag management ----

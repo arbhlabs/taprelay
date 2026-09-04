@@ -20,16 +20,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.*
 import androidx.compose.material3.RadioButton
@@ -56,6 +61,7 @@ import com.arbhlabs.taprelay.domain.model.DiscoveredScene
 import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.model.powerIntent
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
+import com.arbhlabs.taprelay.domain.provider.SENSIBO_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
 import kotlin.math.roundToInt
@@ -65,7 +71,8 @@ val ICONS: Map<String, ImageVector> = mapOf(
     "room" to Icons.Default.Weekend,
     "plug" to Icons.Default.Power,
     "switch" to Icons.Default.Bolt,
-    "scene" to Icons.Default.AutoAwesome
+    "scene" to Icons.Default.AutoAwesome,
+    "air" to Icons.Default.Air
 )
 
 fun iconFor(key: String) = ICONS[key] ?: Icons.Default.Lightbulb
@@ -80,6 +87,9 @@ fun TapRelayApp(vm: TapRelayViewModel) {
 
     var startedOnboarding by rememberSaveable { mutableStateOf(false) }
     var showConnections by rememberSaveable { mutableStateOf(false) }
+    var showProDialog by rememberSaveable { mutableStateOf(false) }
+    var showDiagnostics by rememberSaveable { mutableStateOf(false) }
+    var showNfcStore by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -106,13 +116,26 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     tags = ui.tags,
                     goveeConnected = ui.goveeConnected,
                     tuyaConnected = ui.tuyaConnected,
+                    sensiboConnected = ui.sensiboConnected,
+                    isPro = ui.isPro,
                     nfcReady = nfcReady,
-                    onOpenConnections = { showConnections = true }
+                    onOpenConnections = { showConnections = true },
+                    onOpenPro = { showProDialog = true },
+                    onOpenDiagnostics = { showDiagnostics = true },
+                    onOpenNfcStore = { showNfcStore = true }
                 )
         }
 
         if (wizard.active) {
-            Surface(Modifier.fillMaxSize()) { AddTagFlow(vm, nfcReady) }
+            Surface(Modifier.fillMaxSize()) {
+                AddTagFlow(
+                    vm = vm,
+                    nfcReady = nfcReady,
+                    isPro = ui.isPro,
+                    onOpenPro = { showProDialog = true },
+                    onOpenNfcStore = { showNfcStore = true }
+                )
+            }
         }
 
         TapRelayPill(feedback = pill, onDismiss = { vm.clearPill() }, modifier = Modifier.align(Alignment.TopCenter))
@@ -124,6 +147,32 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                 text = { Text("This TapRelay tag isn't set up on this phone yet. Set it up now?") },
                 confirmButton = { TextButton(onClick = { vm.configureUnregisteredTag(id) }) { Text("Set up") } },
                 dismissButton = { TextButton(onClick = { vm.dismissSetupPrompt() }) { Text("Not now") } }
+            )
+        }
+
+        if (showProDialog) {
+            ProUpgradeDialog(
+                isPro = ui.isPro,
+                isTrialActive = ui.isTrialActive,
+                trialDaysRemaining = ui.trialDaysRemaining,
+                onDismiss = { showProDialog = false },
+                onStartFreeTrial = { cb -> vm.startFreeTrial(cb) },
+                onActivateLicense = { key, cb -> vm.activateLicense(key, cb) },
+                onDeactivate = { vm.deactivateLicense() }
+            )
+        }
+
+        if (showDiagnostics) {
+            DiagnosticsSheet(
+                vm = vm,
+                onDismiss = { showDiagnostics = false }
+            )
+        }
+
+        if (showNfcStore) {
+            NfcStoreDialog(
+                isPro = ui.isPro,
+                onDismiss = { showNfcStore = false }
             )
         }
     }
@@ -187,6 +236,7 @@ private fun ConnectionsScreen(
     var tuyaSecret by rememberSaveable { mutableStateOf("") }
     var tuyaRegion by rememberSaveable { mutableStateOf("us") }
     var tuyaUid by rememberSaveable { mutableStateOf("") }
+    var sensiboKey by rememberSaveable { mutableStateOf("") }
 
     var showGoogleInfo by remember { mutableStateOf(false) }
 
@@ -352,6 +402,57 @@ private fun ConnectionsScreen(
                 }
             }
 
+            // --- SENSIBO CARD ---
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Sensibo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            val statusText = if (ui.sensiboConnected) {
+                                "Connected • ${ui.sensiboDeviceCount} pods"
+                            } else "Not connected"
+                            Text(
+                                statusText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (ui.sensiboConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        if (ui.sensiboConnected) {
+                            FilledTonalButton(onClick = { vm.disconnectSensibo() }) { Text("Disconnect") }
+                        }
+                    }
+
+                    if (!ui.sensiboConnected) {
+                        Text(
+                            "Control your Sensibo Air Purifiers, Fans, and AC units. Get your personal API key at home.sensibo.com/me/api.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = sensiboKey,
+                            onValueChange = { sensiboKey = it; vm.resetConnectState() },
+                            label = { Text("Sensibo API Key") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Button(
+                            onClick = { vm.connectSensibo(sensiboKey) },
+                            enabled = state !is TapRelayViewModel.ConnectState.Validating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (state is TapRelayViewModel.ConnectState.Validating) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Connect Sensibo")
+                            }
+                        }
+                    }
+                }
+            }
+
             // --- GOOGLE HOME CARD ---
             ElevatedCard(
                 shape = RoundedCornerShape(16.dp),
@@ -400,19 +501,43 @@ private fun HomeScreen(
     tags: List<TagEntity>,
     goveeConnected: Boolean,
     tuyaConnected: Boolean,
+    sensiboConnected: Boolean,
+    isPro: Boolean,
     nfcReady: Boolean,
-    onOpenConnections: () -> Unit
+    onOpenConnections: () -> Unit,
+    onOpenPro: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
+    onOpenNfcStore: () -> Unit
 ) {
     var detail by remember { mutableStateOf<TagEntity?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
 
-    val anyConnected = goveeConnected || tuyaConnected
+    val anyConnected = goveeConnected || tuyaConnected || sensiboConnected
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("TapRelay") },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("TapRelay")
+                        if (isPro) {
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    "PRO",
+                                    Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+                },
                 actions = {
                     AssistChip(
                         onClick = onOpenConnections,
@@ -422,6 +547,7 @@ private fun HomeScreen(
                                     val parts = mutableListOf<String>()
                                     if (goveeConnected) parts.add("Govee")
                                     if (tuyaConnected) parts.add("Smart Life")
+                                    if (sensiboConnected) parts.add("Sensibo")
                                     parts.joinToString(" + ")
                                 } else "Not connected"
                             )
@@ -440,7 +566,24 @@ private fun HomeScreen(
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
+                            text = { Text("TapRelay Pro") },
+                            leadingIcon = { Icon(Icons.Default.Star, null, tint = MaterialTheme.colorScheme.primary) },
+                            onClick = { menuOpen = false; onOpenPro() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Diagnostics & Replay") },
+                            leadingIcon = { Icon(Icons.Default.History, null) },
+                            onClick = { menuOpen = false; onOpenDiagnostics() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Shop NFC Hardware") },
+                            leadingIcon = { Icon(Icons.Default.ShoppingCart, null) },
+                            onClick = { menuOpen = false; onOpenNfcStore() }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
                             text = { Text("Connections") },
+                            leadingIcon = { Icon(Icons.Default.Hub, null) },
                             onClick = { menuOpen = false; onOpenConnections() }
                         )
                         DropdownMenuItem(
@@ -453,7 +596,13 @@ private fun HomeScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { vm.startWizard() },
+                onClick = {
+                    if (tags.size >= 5 && !isPro) {
+                        onOpenPro()
+                    } else {
+                        vm.startWizard()
+                    }
+                },
                 icon = { Icon(Icons.Default.Add, null) },
                 text = { Text("Add Tag") }
             )
@@ -478,6 +627,22 @@ private fun HomeScreen(
             }
         } else {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isPro) "${tags.size} Active Tags (Pro)" else "${tags.size} / 5 Free Tags",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    if (!isPro) {
+                        TextButton(onClick = onOpenPro, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                            Text("Upgrade", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
                 tags.forEach { tag ->
                     ElevatedCard(
                         onClick = { detail = tag },
@@ -502,7 +667,11 @@ private fun HomeScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                val providerLabel = if (tag.providerId == TUYA_PROVIDER_ID) "Smart Life" else "Govee"
+                                val providerLabel = when (tag.providerId) {
+                                    TUYA_PROVIDER_ID -> "Smart Life"
+                                    SENSIBO_PROVIDER_ID -> "Sensibo"
+                                    else -> "Govee"
+                                }
                                 val actLabel = tagActionSummary(tag)
                                 Text(
                                     "$providerLabel • $actLabel" + if (!tag.enabled) " • off" else "",
@@ -594,7 +763,13 @@ private fun TagDetailSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
+private fun AddTagFlow(
+    vm: TapRelayViewModel,
+    nfcReady: Boolean,
+    isPro: Boolean,
+    onOpenPro: () -> Unit,
+    onOpenNfcStore: () -> Unit
+) {
     val w by vm.wizard.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Devices, 1 = Scenes
 
@@ -613,12 +788,12 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when (w.step) {
-                WizardStep.SCAN -> ScanStep(w, vm, nfcReady)
+                WizardStep.SCAN -> ScanStep(w, vm, nfcReady, onOpenNfcStore)
 
                 WizardStep.PICK_DEVICE -> {
                     Text("What should this tag control?", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Pick one light, or several to control them together.",
+                        "Pick one light or device, or several to control them together.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -654,6 +829,10 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                 val picked = w.selectedDevices.any {
                                     it.deviceId == d.deviceId && it.providerId == d.providerId
                                 }
+                                val dIcon = when (d.providerId) {
+                                    SENSIBO_PROVIDER_ID -> Icons.Default.Air
+                                    else -> Icons.Default.Lightbulb
+                                }
                                 ElevatedCard(
                                     onClick = { vm.toggleDeviceSelection(d) },
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
@@ -662,16 +841,13 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                         Modifier.padding(16.dp).fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Lightbulb, null, tint = MaterialTheme.colorScheme.primary)
+                                        Icon(dIcon, null, tint = MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.width(12.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(d.name, style = MaterialTheme.typography.titleMedium)
-                                            // Govee exposes a room grouping as a device of its
-                                            // own, and its API only ever lets that switch on and
-                                            // off — so say so rather than leaving the user to
-                                            // wonder why it cannot take a colour.
                                             val pLabel = when {
                                                 d.providerId == TUYA_PROVIDER_ID -> "Smart Life"
+                                                d.providerId == SENSIBO_PROVIDER_ID -> "Sensibo"
                                                 d.sku == GOVEE_GROUP_SKU -> "Govee group"
                                                 else -> "Govee"
                                             }
@@ -688,16 +864,45 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                     }
                                 }
                             }
+
+                            if (w.selectedDevices.size > 1) {
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = if (isPro) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer),
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                                ) {
+                                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                if (isPro) "Multi-Target Routine Active (${w.selectedDevices.size} devices)" else "Multi-Target Routine (Pro Feature)",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            if (!isPro) {
+                                                Text(
+                                                    "Controlling multiple devices from one tag requires TapRelay Pro.",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             Button(
-                                onClick = { vm.continueFromDevices() },
+                                onClick = {
+                                    if (w.selectedDevices.size > 1 && !isPro) onOpenPro()
+                                    else vm.continueFromDevices()
+                                },
                                 enabled = w.selectedDevices.isNotEmpty(),
                                 modifier = Modifier.fillMaxWidth().height(52.dp).padding(top = 8.dp)
                             ) {
                                 Text(
                                     when (w.selectedDevices.size) {
-                                        0 -> "Pick a light"
+                                        0 -> "Pick a device"
                                         1 -> "Continue"
-                                        else -> "Continue with ${w.selectedDevices.size} lights"
+                                        else -> "Continue with ${w.selectedDevices.size} devices"
                                     }
                                 )
                             }
@@ -776,6 +981,56 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                 checked = w.wantsBrightness,
                                 onCheckedChange = { vm.setWantsBrightness(it) }
                             )
+                        }
+                    }
+
+                    // Pro Feature: Context-Aware Time-of-Day Condition
+                    ExtraToggleRow(
+                        label = "Time-of-day condition (Pro)",
+                        hint = if (w.timeConditionEnabled)
+                            "Active ${String.format("%02d:%02d", w.startHour, w.startMinute)} – ${String.format("%02d:%02d", w.endHour, w.endMinute)}"
+                        else "Only trigger this action during specific hours",
+                        checked = w.timeConditionEnabled,
+                        onCheckedChange = { checked ->
+                            if (checked && !isPro) {
+                                onOpenPro()
+                            } else {
+                                vm.setTimeConditionEnabled(checked)
+                            }
+                        }
+                    )
+
+                    if (w.timeConditionEnabled) {
+                        ElevatedCard(
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Active Window", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("From: ${String.format("%02d:%02d", w.startHour, w.startMinute)}", style = MaterialTheme.typography.bodyMedium)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        FilledTonalButton(onClick = { vm.setTimeWindow((w.startHour - 1 + 24) % 24, w.startMinute, w.endHour, w.endMinute) }) { Text("-1h") }
+                                        FilledTonalButton(onClick = { vm.setTimeWindow((w.startHour + 1) % 24, w.startMinute, w.endHour, w.endMinute) }) { Text("+1h") }
+                                    }
+                                }
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Until: ${String.format("%02d:%02d", w.endHour, w.endMinute)}", style = MaterialTheme.typography.bodyMedium)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        FilledTonalButton(onClick = { vm.setTimeWindow(w.startHour, w.startMinute, (w.endHour - 1 + 24) % 24, w.endMinute) }) { Text("-1h") }
+                                        FilledTonalButton(onClick = { vm.setTimeWindow(w.startHour, w.startMinute, (w.endHour + 1) % 24, w.endMinute) }) { Text("+1h") }
+                                    }
+                                }
+                                Text("Outside window: turns off connected devices", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
 
@@ -973,7 +1228,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                 )
                 Text(
                     "Smart-home control uses your own personal developer credentials under a Bring-Your-Own-Key model. " +
-                        "TapRelay is not affiliated with, sponsored by, or endorsed by Govee, Tuya, Smart Life, or Google.",
+                        "TapRelay is not affiliated with, sponsored by, or endorsed by Govee, Tuya, Smart Life, Sensibo, or Google.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -988,7 +1243,12 @@ private fun AboutDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ScanStep(w: WizardState, vm: TapRelayViewModel, nfcReady: Boolean) {
+private fun ScanStep(
+    w: WizardState,
+    vm: TapRelayViewModel,
+    nfcReady: Boolean,
+    onOpenNfcStore: () -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (!nfcReady) NfcOffBanner()
         Text(
@@ -1040,6 +1300,15 @@ private fun ScanStep(w: WizardState, vm: TapRelayViewModel, nfcReady: Boolean) {
                     }
             }
         }
+
+        TextButton(
+            onClick = onOpenNfcStore,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Icon(Icons.Default.ShoppingCart, null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Need stickers? Order compatible NFC tags")
+        }
     }
 }
 
@@ -1083,10 +1352,13 @@ private fun tagActionSummary(tag: TagEntity): String {
         add(actionLabel(tag.actionType.powerIntent()))
         tag.colorRgb?.let { add(LightPresets.nameFor(it)) }
         tag.brightnessPercent?.let { add("${Brightness.clampPercent(it)}%") }
+        if (tag.timeConditionEnabled && tag.startHour != null && tag.endHour != null) {
+            add(String.format("%02d:%02d–%02d:%02d", tag.startHour, tag.startMinute ?: 0, tag.endHour, tag.endMinute ?: 0))
+        }
     }
     val action = parts.joinToString(" • ")
     val count = tag.allTargets.size
-    return if (count > 1) "$action • $count lights" else action
+    return if (count > 1) "$action • $count devices" else action
 }
 
 /** Govee reports a Home room grouping as a device with this sku. */
@@ -1131,4 +1403,332 @@ private fun actionLabel(a: ActionType) = when (a) {
     ActionType.SET_COLOR -> "Set Colour"
     ActionType.SET_SCENE -> "Set Colour + Brightness"
     ActionType.RUN_SCENE -> "Run Scene"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProUpgradeDialog(
+    isPro: Boolean,
+    isTrialActive: Boolean = false,
+    trialDaysRemaining: Int = 0,
+    onDismiss: () -> Unit,
+    onStartFreeTrial: ((Result<String>) -> Unit) -> Unit,
+    onActivateLicense: (String, (Result<String>) -> Unit) -> Unit,
+    onDeactivate: () -> Unit = {}
+) {
+    var licenseKeyInput by rememberSaveable { mutableStateOf("") }
+    var activating by remember { mutableStateOf(false) }
+    var startingTrial by remember { mutableStateOf(false) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    var isError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("TapRelay Pro")
+            }
+        },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                if (isPro) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                if (isTrialActive) {
+                                    Text("7-Day Free Trial Active", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    Text("$trialDaysRemaining days remaining. All Pro features unlocked.", style = MaterialTheme.typography.bodySmall)
+                                } else {
+                                    Text("Pro Unlocked", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    Text("All Pro capabilities active on this device.", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
+                    TextButton(
+                        onClick = onDeactivate,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text("Reset to Free Tier", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+                    }
+                } else {
+                    Text(
+                        "Supercharge your physical smart-home buttons with advanced routines and telemetry.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Button(
+                        onClick = {
+                            startingTrial = true
+                            statusMessage = null
+                            onStartFreeTrial { res ->
+                                startingTrial = false
+                                res.onSuccess { msg ->
+                                    isError = false
+                                    statusMessage = msg
+                                }.onFailure { err ->
+                                    isError = true
+                                    statusMessage = err.message ?: "Trial activation failed"
+                                }
+                            }
+                        },
+                        enabled = !startingTrial && !activating,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        if (startingTrial) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        } else {
+                            Icon(Icons.Filled.Star, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Start 7-Day Free Trial", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text(
+                        "1-tap instant access • No credit card required",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+
+                    ElevatedCard(shape = RoundedCornerShape(12.dp)) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("1. Multi-Target Routines", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Trigger groups of lights, fans, and ACs simultaneously from a single NFC tag.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                            Text("2. Context-Aware Smart Tags", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Set time-of-day execution windows (e.g. daytime vs night relaxation behaviors).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                            Text("3. Action History & Replay", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Real-time telemetry, millisecond execution audit logs, and 1-tap instant action replay.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+
+                            Text("Perk: 20% NFC Hardware Discount", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                            Text("Use code PROTAP20 for 20% off all pre-formatted NTAG stickers on arbhlabs.com.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    Text("Plans", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedCard(Modifier.weight(1f)) {
+                            Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Monthly", style = MaterialTheme.typography.labelSmall)
+                                Text("€1.99", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("/month", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        OutlinedCard(Modifier.weight(1f)) {
+                            Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Annual", style = MaterialTheme.typography.labelSmall)
+                                Text("€19.99", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("/year", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        OutlinedCard(Modifier.weight(1f)) {
+                            Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Lifetime", style = MaterialTheme.typography.labelSmall)
+                                Text("€49.99", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                Text("one-time", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                    }
+                }
+
+                Text("Activate License", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = licenseKeyInput,
+                    onValueChange = { licenseKeyInput = it },
+                    label = { Text("License Key or Admin Bypass") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Button(
+                    onClick = {
+                        activating = true
+                        statusMessage = null
+                        onActivateLicense(licenseKeyInput) { res ->
+                            activating = false
+                            res.onSuccess { msg ->
+                                isError = false
+                                statusMessage = msg
+                            }.onFailure { err ->
+                                isError = true
+                                statusMessage = err.message ?: "Activation failed"
+                            }
+                        }
+                    },
+                    enabled = !activating && !startingTrial && licenseKeyInput.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (activating) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Activate")
+                    }
+                }
+
+                statusMessage?.let { msg ->
+                    Text(
+                        msg,
+                        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DiagnosticsSheet(
+    vm: TapRelayViewModel,
+    onDismiss: () -> Unit
+) {
+    val logs by vm.tapLogs.collectAsState(initial = emptyList())
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.padding(horizontal = 24.dp, vertical = 16.dp).navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("Tap Diagnostics & Replay", style = MaterialTheme.typography.titleLarge)
+            }
+            Text(
+                "Execution history and latency telemetry. Tap 'Replay' to test-trigger any action without tapping the sticker.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (logs.isEmpty()) {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("No action history recorded yet. Tap an NFC tag to record telemetry.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
+                }
+            } else {
+                Column(
+                    Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    logs.forEach { log ->
+                        ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.padding(12.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier.size(10.dp).clip(CircleShape).background(
+                                        if (log.success) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                                    )
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(log.tagName, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                                    val timeStr = java.time.Instant.ofEpochMilli(log.timestamp)
+                                        .atZone(java.time.ZoneId.systemDefault())
+                                        .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
+                                    val statusDetail = if (log.success) "${log.durationMs}ms" else (log.errorMessage ?: "Failed")
+                                    Text(
+                                        "$timeStr • ${log.providerId} • $statusDetail",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                FilledTonalButton(
+                                    onClick = { vm.replay(log.tagId) },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Replay", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+fun NfcStoreDialog(
+    isPro: Boolean,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = {
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("https://arbhlabs.com/taprelay/tags")
+                    )
+                    context.startActivity(intent)
+                    onDismiss()
+                }
+            ) {
+                Text("Open Tag Store")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Dismiss") }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.ShoppingCart, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("Shop NFC Hardware")
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "High-grade pre-formatted NFC tags tested for optimal read range with Pixel, Galaxy, and other Android devices.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                ElevatedCard(shape = RoundedCornerShape(12.dp)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("• Standard Stickers (NTAG213 / NTAG215)", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                        Text("Ultra-thin adhesive stickers ideal for walls, desks, bedside tables, and nightstands.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(4.dp))
+                        Text("• Anti-Metal Shielded Tags", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                        Text("Ferrite-backed tags engineered for metal surfaces, radiators, and metal-cased appliances.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("20% Hardware Discount", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("Use promo code PROTAP20 at checkout for 20% off all packs on arbhlabs.com.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+            }
+        }
+    )
 }
