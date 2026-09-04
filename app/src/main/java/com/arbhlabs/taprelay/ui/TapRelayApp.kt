@@ -8,6 +8,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lightbulb
@@ -29,12 +32,14 @@ import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.*
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -43,11 +48,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
+import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
+import kotlin.math.roundToInt
 
 val ICONS: Map<String, ImageVector> = mapOf(
     "lamp" to Icons.Default.Lightbulb,
@@ -492,7 +500,7 @@ private fun HomeScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 val providerLabel = if (tag.providerId == TUYA_PROVIDER_ID) "Smart Life" else "Govee"
-                                val actLabel = actionLabel(tag.actionType)
+                                val actLabel = tagActionSummary(tag)
                                 Text(
                                     "$providerLabel • $actLabel" + if (!tag.enabled) " • off" else "",
                                     style = MaterialTheme.typography.bodySmall,
@@ -558,7 +566,7 @@ private fun TagDetailSheet(
                 Switch(checked = tag.enabled, onCheckedChange = onToggleEnabled)
             }
             Text(
-                "Currently ${actionLabel(tag.actionType).lowercase()} on “${tag.friendlyName}”. " +
+                "Currently ${tagActionSummary(tag).lowercase()} on “${tag.friendlyName}”. " +
                     "Changing the device, scene, or action does not require re-tapping the sticker.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -606,6 +614,11 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
 
                 WizardStep.PICK_DEVICE -> {
                     Text("What should this tag control?", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Pick one light, or several to control them together.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     if (w.discovering) {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -635,8 +648,11 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
 
                         if (selectedTab == 0 || w.scenes.isEmpty()) {
                             w.devices.forEach { d ->
+                                val picked = w.selectedDevices.any {
+                                    it.deviceId == d.deviceId && it.providerId == d.providerId
+                                }
                                 ElevatedCard(
-                                    onClick = { vm.selectDevice(d) },
+                                    onClick = { vm.toggleDeviceSelection(d) },
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                                 ) {
                                     Row(
@@ -655,8 +671,22 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                                 color = if (d.isOnline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outline
                                             )
                                         }
+                                        Checkbox(checked = picked, onCheckedChange = { vm.toggleDeviceSelection(d) })
                                     }
                                 }
+                            }
+                            Button(
+                                onClick = { vm.continueFromDevices() },
+                                enabled = w.selectedDevices.isNotEmpty(),
+                                modifier = Modifier.fillMaxWidth().height(52.dp).padding(top = 8.dp)
+                            ) {
+                                Text(
+                                    when (w.selectedDevices.size) {
+                                        0 -> "Pick a light"
+                                        1 -> "Continue"
+                                        else -> "Continue with ${w.selectedDevices.size} lights"
+                                    }
+                                )
                             }
                         } else {
                             w.scenes.forEach { s ->
@@ -683,11 +713,81 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
 
                 WizardStep.PICK_ACTION -> {
                     Text("What should it do?", style = MaterialTheme.typography.titleMedium)
-                    listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF).forEach { a ->
+                    val actions = buildList {
+                        addAll(listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF))
+                        val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
+                        if (picked.isNotEmpty() && picked.all { it.supportsBrightness }) add(ActionType.SET_BRIGHTNESS)
+                        if (picked.isNotEmpty() && picked.all { it.supportsColor }) add(ActionType.SET_COLOR)
+                    }
+                    actions.forEach { a ->
                         ElevatedCard(onClick = { vm.selectAction(a) }, modifier = Modifier.fillMaxWidth()) {
                             Text(actionLabel(a), Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
                         }
                     }
+                }
+
+                WizardStep.TUNE -> {
+                    if (w.action == ActionType.SET_BRIGHTNESS) {
+                        Text("How bright?", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "${w.brightnessPercent}%",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Slider(
+                            value = w.brightnessPercent.toFloat(),
+                            onValueChange = { vm.setBrightness(it.roundToInt()) },
+                            valueRange = Brightness.MIN_PERCENT.toFloat()..Brightness.MAX_PERCENT.toFloat(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "Every tap of this sticker sets the light to exactly this brightness.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text("Which colour?", style = MaterialTheme.typography.titleMedium)
+                        LightPresets.ALL.chunked(4).forEach { row ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            ) {
+                            row.forEach { preset ->
+                                val selected = w.colorRgb == preset.rgb
+                                Box(
+                                    Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF000000L.toInt() or preset.rgb))
+                                        .border(
+                                            width = if (selected) 3.dp else 1.dp,
+                                            color = if (selected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.outlineVariant,
+                                            shape = CircleShape
+                                        )
+                                        .clickable { vm.setColor(preset.rgb) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (selected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            null,
+                                            tint = Color.Black.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                            }
+                            }
+                        }
+                        Text(
+                            LightPresets.nameFor(w.colorRgb),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    Button(
+                        onClick = { vm.confirmTuning() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) { Text("Continue") }
                 }
 
                 WizardStep.NAME -> {
@@ -753,7 +853,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text("About TapRelay") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("TapRelay by ARBH Labs — version 0.0.4 (alpha).", style = MaterialTheme.typography.bodyMedium)
+                Text("TapRelay by ARBH Labs — version 0.0.5 (alpha).", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     "This is an early internal test build. Things may change or break.",
                     style = MaterialTheme.typography.bodySmall,
@@ -865,9 +965,23 @@ private fun NfcPulse() {
     }
 }
 
+/** What a saved tag does, including the brightness or colour it was given. */
+private fun tagActionSummary(tag: TagEntity): String {
+    val action = when (tag.actionType) {
+        ActionType.SET_BRIGHTNESS ->
+            "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
+        ActionType.SET_COLOR -> LightPresets.nameFor(tag.colorRgb ?: 0)
+        else -> actionLabel(tag.actionType)
+    }
+    val count = tag.allTargets.size
+    return if (count > 1) "$action • $count lights" else action
+}
+
 private fun actionLabel(a: ActionType) = when (a) {
     ActionType.TOGGLE -> "Toggle"
     ActionType.TURN_ON -> "Turn On"
     ActionType.TURN_OFF -> "Turn Off"
+    ActionType.SET_BRIGHTNESS -> "Set Brightness"
+    ActionType.SET_COLOR -> "Set Colour"
     ActionType.RUN_SCENE -> "Run Scene"
 }

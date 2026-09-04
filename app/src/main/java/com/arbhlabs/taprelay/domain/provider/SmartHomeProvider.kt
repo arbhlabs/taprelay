@@ -1,8 +1,11 @@
 package com.arbhlabs.taprelay.domain.provider
 
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
+import com.arbhlabs.taprelay.domain.model.TapError
+import com.arbhlabs.taprelay.domain.model.TapException
 import com.arbhlabs.taprelay.domain.model.TargetType
 
 /**
@@ -24,16 +27,32 @@ interface SmartHomeProvider {
 
     suspend fun setPower(deviceId: String, sku: String, on: Boolean)
 
+    /** Sets brightness as a 1-100 percentage. Providers translate to their own scale. */
+    suspend fun setBrightness(deviceId: String, sku: String, percent: Int): Unit =
+        throw TapException(TapError.UNSUPPORTED_ACTION)
+
+    /** Sets colour from a packed 0xRRGGBB integer. */
+    suspend fun setColor(deviceId: String, sku: String, rgb: Int): Unit =
+        throw TapException(TapError.UNSUPPORTED_ACTION)
+
     suspend fun executeAction(
         targetId: String,
         targetType: TargetType,
         sku: String,
         action: ActionType,
-        targetState: Int
+        targetState: Int,
+        brightnessPercent: Int? = null,
+        colorRgb: Int? = null
     ) {
-        when (targetType) {
-            TargetType.DEVICE -> setPower(targetId, sku, on = targetState == 1)
-            TargetType.SCENE -> Unit
+        if (targetType == TargetType.SCENE) return
+        when (action) {
+            ActionType.SET_BRIGHTNESS -> setBrightness(
+                targetId, sku, brightnessPercent ?: Brightness.DEFAULT_PERCENT
+            )
+            ActionType.SET_COLOR -> setColor(
+                targetId, sku, colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION)
+            )
+            else -> setPower(targetId, sku, on = targetState == 1)
         }
     }
 }

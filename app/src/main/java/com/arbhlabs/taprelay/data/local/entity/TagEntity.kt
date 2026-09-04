@@ -3,6 +3,7 @@ package com.arbhlabs.taprelay.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.TagTarget
 import com.arbhlabs.taprelay.domain.model.TargetType
 
 /**
@@ -20,9 +21,22 @@ data class TagEntity(
     val deviceSku: String,
     val actionType: ActionType,
     val targetType: TargetType = TargetType.DEVICE,
+    /** Only set when [actionType] is SET_BRIGHTNESS. 1-100. */
+    val brightnessPercent: Int? = null,
+    /** Only set when [actionType] is SET_COLOR. Packed 0xRRGGBB. */
+    val colorRgb: Int? = null,
+    /**
+     * Further lights this one tag also drives, beyond the primary target above.
+     * They all follow the primary's state so the group moves together.
+     */
+    val additionalTargets: List<TagTarget> = emptyList(),
     val enabled: Boolean = true,
     val lastKnownState: Int = 1,
     val createdAt: Long = System.currentTimeMillis(),
     val modifiedAt: Long = System.currentTimeMillis(),
     val lastTriggeredAt: Long? = null
-)
+) {
+    /** Every light this tag drives, primary first. */
+    val allTargets: List<TagTarget>
+        get() = listOf(TagTarget(providerId, deviceId, deviceSku, friendlyName)) + additionalTargets
+}

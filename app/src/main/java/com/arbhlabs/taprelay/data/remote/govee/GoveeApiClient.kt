@@ -94,6 +94,41 @@ class GoveeApiClient(engine: HttpClientEngine? = null) {
         if (body.code != 200 && body.code != 0) throw TapException(TapError.SERVER)
     }
 
+    /** Brightness as a 1-100 percentage (Govee's own scale for the range capability). */
+    suspend fun setBrightness(apiKey: String, sku: String, device: String, percent: Int) =
+        sendCapability(apiKey, sku, device, "devices.capabilities.range", "brightness", percent)
+
+    /** Colour from a packed 0xRRGGBB integer, which is exactly what colorRgb expects. */
+    suspend fun setColor(apiKey: String, sku: String, device: String, rgb: Int) =
+        sendCapability(apiKey, sku, device, "devices.capabilities.color_setting", "colorRgb", rgb)
+
+    private suspend fun sendCapability(
+        apiKey: String,
+        sku: String,
+        device: String,
+        type: String,
+        instance: String,
+        value: Int
+    ) = wrap {
+        val res = client.post("$BASE/device/control") {
+            header("Govee-API-Key", apiKey)
+            contentType(ContentType.Application.Json)
+            setBody(
+                GoveeControlRequest(
+                    requestId = UUID.randomUUID().toString(),
+                    payload = GoveeControlPayload(
+                        sku = sku,
+                        device = device,
+                        capability = GoveeCapabilityValue(type = type, instance = instance, value = value)
+                    )
+                )
+            )
+        }
+        check(res)
+        val body = res.body<GoveeControlResponse>()
+        if (body.code != 200 && body.code != 0) throw TapException(TapError.SERVER)
+    }
+
     private suspend fun check(res: HttpResponse) {
         when (res.status) {
             HttpStatusCode.OK -> return

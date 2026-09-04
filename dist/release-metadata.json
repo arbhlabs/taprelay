@@ -2,15 +2,15 @@
   "product": "TapRelay",
   "vendor": "ARBH Labs",
   "channel": "alpha",
-  "versionName": "0.0.4",
-  "versionCode": 4,
+  "versionName": "0.0.5",
+  "versionCode": 5,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
   "date": "2026-09-04",
-  "artifact": "TapRelay-v0.0.4.apk",
-  "sha256": "026e57e485da904214f7ecd1c5568916ad27f186a8801cf518add8915ef98772",
-  "sizeBytes": 6757226,
+  "artifact": "TapRelay-v0.0.5.apk",
+  "sha256": "0e0f63312ce8d7c88f5375053a84c7993e4661076ada297e003782115621ed69",
+  "sizeBytes": 6822794,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
     "schemes": "v2 (APK Signature Scheme v2)",
@@ -18,15 +18,16 @@
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
   "verifiedOnPixel7": [
-    "in-place upgrade over the installed build with tag mappings and provider keys preserved",
-    "real Smart Life / Tuya discovery lists Corner Lamp, Accent Lamp Bottom and Accent Light Top by their account names",
-    "Turn On, Turn Off and Toggle all executed against the real Corner Lamp",
-    "Toggle reads the live switch_led data point and sends the inverse",
-    "two consecutive scans of a real NFC sticker toggle Corner Lamp on then off",
-    "Govee discovery and Toggle still work and were left in their original state"
+    "in-place upgrade over the installed build with tags, groups and provider keys preserved",
+    "one tag driving six real lights across both clouds, toggled off then on, 6/6 each time",
+    "a mixed Govee + Smart Life pair toggled from the primary light's authoritative state, 2/2 each way",
+    "Set Colour (Violet) accepted by both clouds for the mixed pair, 2/2",
+    "Set Brightness (25%) accepted by both clouds for the mixed pair, 2/2",
+    "Turn On, Turn Off and Toggle still correct on a single real light",
+    "new launcher icon checked on the device's own launcher, light mark on brand teal"
   ],
   "notVerified": [
-    "Accent Lamp Bottom and Accent Light Top control (both bulbs were unpowered at test time because their wall switch was off, so they were absent from the Tuya cloud; they were still discovered and correctly shown as offline)",
+    "the exact rendered hue and brightness at the bulb (both clouds accepted every command and reported success, but colour temperature and perceived level are the owner's to judge)",
     "Tuya scenes (the project has no scene subscription; the scene list is empty)",
     "cold-start-from-killed scan latency (functional, not timed)",
     "App Link autoVerify (needs assetlinks.json on taprelay.app)"
@@ -39,5 +40,5 @@
     "goveeLan": "not implemented",
     "matter": "not implemented"
   },
-  "publicDistribution": "private alpha — keep the alpha + non-affiliation disclaimer visible"
+  "publicDistribution": "private alpha \u2014 keep the alpha + non-affiliation disclaimer visible"
 }

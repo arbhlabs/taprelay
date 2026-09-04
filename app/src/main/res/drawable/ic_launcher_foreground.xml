@@ -4,28 +4,42 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- fingertip / tap point -->
+    <!--
+      A tap point with three waves radiating from it. The whole mark is balanced
+      on the icon centre (54,54) and stays inside the 66dp adaptive safe zone, so
+      no launcher mask clips it. One colour, one stroke weight, and depth carried
+      by opacity alone rather than by three competing tints.
+    -->
+
+    <!-- tap point -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M40,66m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0z" />
+        android:pathData="M40,54m-7.5,0a7.5,7.5 0,1 1,15 0a7.5,7.5 0,1 1,-15 0z" />
 
-    <!-- ripple arcs radiating from the tap point -->
-    <path
-        android:strokeColor="#FF6EE7DA"
-        android:strokeWidth="5.5"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000"
-        android:pathData="M48,54.1 A16,16 0 0 1 48,77.9" />
+    <!-- wave 1 (r=17) -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="5.5"
+        android:strokeAlpha="1.0"
+        android:strokeWidth="6"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M53,45.5 A26,26 0 0 1 53,86.5" />
+        android:pathData="M48.5,39.28 A17,17 0 0 1 48.5,68.72" />
+
+    <!-- wave 2 (r=26) -->
     <path
-        android:strokeColor="#FFB9F3EC"
-        android:strokeWidth="5"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeAlpha="0.72"
+        android:strokeWidth="6"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M57,38 A33,33 0 0 1 57,94" />
+        android:pathData="M53,31.48 A26,26 0 0 1 53,76.52" />
+
+    <!-- wave 3 (r=35) -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M57.5,23.69 A35,35 0 0 1 57.5,84.31" />
 </vector>

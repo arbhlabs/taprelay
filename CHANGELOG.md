@@ -1,5 +1,39 @@
 # TapRelay Changelog
 
+## v0.0.5 — 2026-09-04 (Alpha / Internal Test)
+
+One sticker can now drive a whole group of lights, and a tap can set a brightness or a
+colour instead of only flipping power. Verified on a Pixel 7 against the live Govee and
+Tuya clouds with six real lights.
+
+### Added
+- **One tag, many lights.** Pick as many lights as you want in Add Tag and they all respond
+  to the same tap. Groups can mix Govee and Smart Life. For Toggle, TapRelay reads the live
+  state of the first light and sends that same result to every light in the group, so they
+  move together instead of drifting apart.
+- **Set Brightness.** Choose an exact brightness on a slider; every tap of that sticker puts
+  the light at that level. Govee gets its 1-100 range value, Tuya gets its 10..1000
+  `bright_value` data point and is switched to white mode so the change is visible.
+- **Set Colour.** Twelve presets from warm white to violet. Govee gets a packed RGB value,
+  Tuya gets hue/saturation/value and is switched to colour mode.
+- Brightness and Colour are only offered when every light in the group supports them, and a
+  light that cannot do what is asked now says so in plain language.
+- The tag list shows what a tag really does — "Brightness 25% • 2 lights", not just "Toggle".
+- If some lights in a group answer and others do not, the confirmation says so
+  ("On (5 of 6)") rather than silently reporting success.
+
+### Changed
+- **New app icon.** The old one was a dark badge on a dark background, so on a dark home
+  screen it read as a hole. The mark is now white on brand teal, centred in the adaptive
+  safe zone, with one stroke weight and depth carried by opacity instead of three competing
+  tints.
+
+### Unchanged / still true
+- The physical sticker still stores only the opaque `https://taprelay.app/t/<uuid>` App Link.
+  Adding lights to a tag, or changing what it does, never rewrites the sticker.
+- Private alpha. TapRelay is not affiliated with, sponsored by, or endorsed by Govee, Tuya,
+  Smart Life or Google.
+
 ## v0.0.4 — 2026-09-04 (Alpha / Internal Test)
 
 Real Smart Life / Tuya support. Verified end to end against a live Tuya Central Europe

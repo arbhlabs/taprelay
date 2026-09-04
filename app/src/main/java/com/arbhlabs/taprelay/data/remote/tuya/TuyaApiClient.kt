@@ -298,14 +298,21 @@ class TuyaApiClient(engine: HttpClientEngine? = null) {
         deviceId: String,
         dpCode: String,
         turnOn: Boolean
+    ) = sendCommands(accessId, secret, region, deviceId, listOf(TuyaCommandItem(dpCode, JsonPrimitive(turnOn))))
+
+    /** Sends one or more data points in a single request, which is what the API expects. */
+    suspend fun sendCommands(
+        accessId: String,
+        secret: String,
+        region: String,
+        deviceId: String,
+        commands: List<TuyaCommandItem>
     ) = wrap {
         val (token, _) = getAccessToken(accessId, secret, region)
         val base = baseUrlForRegion(region)
         val path = "/v1.0/devices/$deviceId/commands"
 
-        val payload = TuyaCommandPayload(
-            commands = listOf(TuyaCommandItem(dpCode, JsonPrimitive(turnOn)))
-        )
+        val payload = TuyaCommandPayload(commands = commands)
         val bodyStr = json.encodeToString(payload)
 
         val t = System.currentTimeMillis().toString()

@@ -24,7 +24,11 @@ class ServiceLocator(context: Context) {
 
     val database: AppDatabase = Room.databaseBuilder(
         appContext, AppDatabase::class.java, "taprelay.db"
-    ).addMigrations(AppDatabase.MIGRATION_1_2)
+    ).addMigrations(
+        AppDatabase.MIGRATION_1_2,
+        AppDatabase.MIGRATION_2_3,
+        AppDatabase.MIGRATION_3_4
+    )
      .fallbackToDestructiveMigration()
      .build()
 

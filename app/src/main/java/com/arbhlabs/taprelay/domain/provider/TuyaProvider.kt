@@ -4,13 +4,20 @@ import com.arbhlabs.taprelay.data.remote.tuya.TuyaApiClient
 import com.arbhlabs.taprelay.data.remote.tuya.TuyaDeviceDto
 import com.arbhlabs.taprelay.data.secure.SecureKeyStorage
 import com.arbhlabs.taprelay.data.secure.TuyaCredentials
+import com.arbhlabs.taprelay.data.remote.tuya.TuyaCommandItem
+import com.arbhlabs.taprelay.data.remote.tuya.TuyaDeviceStatusDto
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.Brightness
+import com.arbhlabs.taprelay.domain.model.ColorMath
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
 import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.TapException
 import com.arbhlabs.taprelay.domain.model.TargetType
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 const val TUYA_PROVIDER_ID = "tuya_cloud"
 
@@ -124,12 +131,81 @@ class TuyaProvider(
         )
     }
 
+    /**
+     * The exact data-point codes differ between Tuya products (`bright_value` vs
+     * `bright_value_v2`), so read them from the device rather than assuming.
+     */
+    private suspend fun dataPoints(deviceId: String): List<TuyaDeviceStatusDto> {
+        val creds = credentials()
+        return api.getDeviceStatus(
+            accessId = creds.accessId,
+            secret = creds.accessSecret,
+            region = creds.region,
+            deviceId = deviceId
+        )
+    }
+
+    private suspend fun send(deviceId: String, commands: List<TuyaCommandItem>) {
+        val creds = credentials()
+        api.sendCommands(
+            accessId = creds.accessId,
+            secret = creds.accessSecret,
+            region = creds.region,
+            deviceId = deviceId,
+            commands = commands
+        )
+    }
+
+    override suspend fun setBrightness(deviceId: String, sku: String, percent: Int) {
+        val codes = dataPoints(deviceId).map { it.code }
+        val brightCode = codes.firstOrNull { it.startsWith(BRIGHTNESS_PREFIX) }
+            ?: throw TapException(TapError.UNSUPPORTED_ACTION)
+        val powerCode = codes.firstOrNull { TuyaDeviceDto.isPowerDp(it) }
+            ?: sku.takeIf { it.isNotBlank() && it != "tuya_device" }
+
+        val commands = buildList {
+            // Asking for a brightness means asking for light.
+            powerCode?.let { add(TuyaCommandItem(it, JsonPrimitive(true))) }
+            // Brightness only applies in white mode; in colour mode the value rides on the colour.
+            if (codes.contains(WORK_MODE)) add(TuyaCommandItem(WORK_MODE, JsonPrimitive("white")))
+            add(TuyaCommandItem(brightCode, JsonPrimitive(Brightness.toTuya(percent))))
+        }
+        send(deviceId, commands)
+    }
+
+    override suspend fun setColor(deviceId: String, sku: String, rgb: Int) {
+        val codes = dataPoints(deviceId).map { it.code }
+        val colorCode = codes.firstOrNull { it.startsWith(COLOR_PREFIX) }
+            ?: throw TapException(TapError.UNSUPPORTED_ACTION)
+        val powerCode = codes.firstOrNull { TuyaDeviceDto.isPowerDp(it) }
+            ?: sku.takeIf { it.isNotBlank() && it != "tuya_device" }
+
+        val (h, sat, v) = ColorMath.toTuyaHsv(rgb)
+        val commands = buildList {
+            powerCode?.let { add(TuyaCommandItem(it, JsonPrimitive(true))) }
+            if (codes.contains(WORK_MODE)) add(TuyaCommandItem(WORK_MODE, JsonPrimitive("colour")))
+            add(
+                TuyaCommandItem(
+                    colorCode,
+                    buildJsonObject {
+                        put("h", h)
+                        put("s", sat)
+                        put("v", v)
+                    }
+                )
+            )
+        }
+        send(deviceId, commands)
+    }
+
     override suspend fun executeAction(
         targetId: String,
         targetType: TargetType,
         sku: String,
         action: ActionType,
-        targetState: Int
+        targetState: Int,
+        brightnessPercent: Int?,
+        colorRgb: Int?
     ) {
         if (targetType == TargetType.SCENE || action == ActionType.RUN_SCENE) {
             val creds = credentials()
@@ -141,19 +217,37 @@ class TuyaProvider(
             )
             return
         }
-        setPower(targetId, sku, on = targetState == 1)
+        when (action) {
+            ActionType.SET_BRIGHTNESS ->
+                setBrightness(targetId, sku, brightnessPercent ?: Brightness.DEFAULT_PERCENT)
+            ActionType.SET_COLOR ->
+                setColor(targetId, sku, colorRgb ?: throw TapException(TapError.UNSUPPORTED_ACTION))
+            else -> setPower(targetId, sku, on = targetState == 1)
+        }
     }
 
     private fun List<TuyaDeviceDto>.toDiscovered(): List<DiscoveredDevice> =
         filter { it.supportsPower || it.category in setOf("dj", "cz", "kg", "cl", "sd") }
             .map {
+                val codes = it.status.map { dp -> dp.code }
+                // An offline light cannot report its data points, so fall back to its category:
+                // "dj" is Tuya's colour-light category.
+                val assumeLight = codes.isEmpty() && it.category.lowercase() == "dj"
                 DiscoveredDevice(
                     deviceId = it.id,
                     sku = it.primaryPowerDpCode,
                     name = it.friendlyName,
                     providerId = TUYA_PROVIDER_ID,
                     supportsPower = true,
+                    supportsBrightness = assumeLight || codes.any { c -> c.startsWith(BRIGHTNESS_PREFIX) },
+                    supportsColor = assumeLight || codes.any { c -> c.startsWith(COLOR_PREFIX) },
                     isOnline = it.online
                 )
             }
+
+    private companion object {
+        const val BRIGHTNESS_PREFIX = "bright_value"
+        const val COLOR_PREFIX = "colour_data"
+        const val WORK_MODE = "work_mode"
+    }
 }

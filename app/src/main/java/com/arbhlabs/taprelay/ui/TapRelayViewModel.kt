@@ -7,9 +7,12 @@ import com.arbhlabs.taprelay.TapRelayApplication
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.data.secure.TuyaCredentials
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.Brightness
+import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
 import com.arbhlabs.taprelay.domain.model.TapException
+import com.arbhlabs.taprelay.domain.model.TagTarget
 import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
@@ -23,7 +26,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class WizardStep { SCAN, PICK_DEVICE, PICK_ACTION, NAME, DONE }
+enum class WizardStep { SCAN, PICK_DEVICE, PICK_ACTION, TUNE, NAME, DONE }
 
 /** Sub-states of the SCAN step while the user holds a sticker to the phone. */
 enum class ScanPhase { READY, DETECTED, WRITING, CONFIRM_OVERWRITE, ERROR }
@@ -40,8 +43,14 @@ data class WizardState(
     val devices: List<DiscoveredDevice> = emptyList(),
     val scenes: List<DiscoveredScene> = emptyList(),
     val device: DiscoveredDevice? = null,
+    /** Every light picked for this tag, in the order they were chosen. */
+    val selectedDevices: List<DiscoveredDevice> = emptyList(),
+    /** Device ids to re-select once discovery finishes, when editing an existing tag. */
+    val pendingTargetIds: List<String> = emptyList(),
     val scene: DiscoveredScene? = null,
     val action: ActionType = ActionType.TOGGLE,
+    val brightnessPercent: Int = Brightness.DEFAULT_PERCENT,
+    val colorRgb: Int = LightPresets.ALL.first().rgb,
     val name: String = "",
     val iconKey: String = "lamp",
     val error: String? = null,
@@ -260,6 +269,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             tagId = tagId,
             targetType = existing?.targetType ?: TargetType.DEVICE,
             action = existing?.actionType ?: ActionType.TOGGLE,
+            brightnessPercent = existing?.brightnessPercent ?: Brightness.DEFAULT_PERCENT,
+            colorRgb = existing?.colorRgb ?: LightPresets.ALL.first().rgb,
+            pendingTargetIds = existing?.allTargets?.map { it.deviceId } ?: emptyList(),
             name = existing?.friendlyName ?: "",
             iconKey = existing?.iconKey ?: "lamp"
         )
@@ -278,6 +290,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             tagId = tag.tagId,
             targetType = tag.targetType,
             action = tag.actionType,
+            brightnessPercent = tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT,
+            colorRgb = tag.colorRgb ?: LightPresets.ALL.first().rgb,
+            pendingTargetIds = tag.allTargets.map { it.deviceId },
             name = tag.friendlyName,
             iconKey = tag.iconKey
         )
@@ -308,10 +323,16 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
+            val wanted = _wizard.value.pendingTargetIds
+            val reselected = if (wanted.isEmpty()) _wizard.value.selectedDevices
+            else wanted.mapNotNull { id -> allDevices.firstOrNull { it.deviceId == id } }
+
             _wizard.value = _wizard.value.copy(
                 discovering = false,
                 devices = allDevices,
-                scenes = allScenes
+                scenes = allScenes,
+                selectedDevices = reselected,
+                pendingTargetIds = emptyList()
             )
         } catch (e: TapException) {
             _wizard.value = _wizard.value.copy(discovering = false, error = e.error.message)
@@ -322,15 +343,41 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     fun retryDiscovery() = discoverDevicesAndScenes()
 
-    fun selectDevice(d: DiscoveredDevice) {
+    /** Tapping a light adds it to the tag; tapping it again removes it. */
+    fun toggleDeviceSelection(d: DiscoveredDevice) {
+        val current = _wizard.value.selectedDevices
+        val next = if (current.any { it.deviceId == d.deviceId && it.providerId == d.providerId }) {
+            current.filterNot { it.deviceId == d.deviceId && it.providerId == d.providerId }
+        } else {
+            current + d
+        }
+        _wizard.value = _wizard.value.copy(selectedDevices = next, scene = null)
+    }
+
+    fun continueFromDevices() {
+        val picked = _wizard.value.selectedDevices
+        if (picked.isEmpty()) return
+        val action = _wizard.value.action
+        // Drop an action the new selection cannot all perform.
+        val stillValid = when (action) {
+            ActionType.SET_BRIGHTNESS -> picked.all { it.supportsBrightness }
+            ActionType.SET_COLOR -> picked.all { it.supportsColor }
+            ActionType.RUN_SCENE -> false
+            else -> true
+        }
         _wizard.value = _wizard.value.copy(
-            device = d,
+            device = picked.first(),
             scene = null,
             targetType = TargetType.DEVICE,
-            name = _wizard.value.name.ifBlank { d.name },
+            action = if (stillValid) action else ActionType.TOGGLE,
+            name = _wizard.value.name.ifBlank { defaultNameFor(picked) },
             step = WizardStep.PICK_ACTION
         )
     }
+
+    private fun defaultNameFor(picked: List<DiscoveredDevice>): String =
+        if (picked.size == 1) picked.first().name
+        else "${picked.first().name} +${picked.size - 1}"
 
     fun selectScene(s: DiscoveredScene) {
         _wizard.value = _wizard.value.copy(
@@ -345,8 +392,20 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectAction(a: ActionType) {
-        _wizard.value = _wizard.value.copy(action = a, step = WizardStep.NAME)
+        val needsValue = a == ActionType.SET_BRIGHTNESS || a == ActionType.SET_COLOR
+        _wizard.value = _wizard.value.copy(
+            action = a,
+            step = if (needsValue) WizardStep.TUNE else WizardStep.NAME
+        )
     }
+
+    fun setBrightness(percent: Int) {
+        _wizard.value = _wizard.value.copy(brightnessPercent = Brightness.clampPercent(percent))
+    }
+
+    fun setColor(rgb: Int) { _wizard.value = _wizard.value.copy(colorRgb = rgb) }
+
+    fun confirmTuning() { _wizard.value = _wizard.value.copy(step = WizardStep.NAME) }
 
     fun setName(v: String) { _wizard.value = _wizard.value.copy(name = v) }
     fun setIcon(v: String) { _wizard.value = _wizard.value.copy(iconKey = v) }
@@ -379,7 +438,11 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 modifiedAt = System.currentTimeMillis()
             )
         } else {
-            val device = w.device ?: return@launch
+            val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
+            val device = picked.firstOrNull() ?: return@launch
+            val extras = picked.drop(1).map {
+                TagTarget(providerId = it.providerId, deviceId = it.deviceId, sku = it.sku, name = it.name)
+            }
             (existing ?: TagEntity(
                 tagId = id,
                 friendlyName = "",
@@ -397,6 +460,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 providerId = device.providerId,
                 actionType = w.action,
                 targetType = TargetType.DEVICE,
+                brightnessPercent = w.brightnessPercent.takeIf { w.action == ActionType.SET_BRIGHTNESS },
+                colorRgb = w.colorRgb.takeIf { w.action == ActionType.SET_COLOR },
+                additionalTargets = extras,
                 modifiedAt = System.currentTimeMillis()
             )
         }

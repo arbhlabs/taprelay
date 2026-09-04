@@ -2,6 +2,7 @@ package com.arbhlabs.taprelay.domain.provider
 
 import com.arbhlabs.taprelay.data.remote.govee.GoveeApiClient
 import com.arbhlabs.taprelay.data.secure.SecureKeyStorage
+import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.TapException
@@ -46,6 +47,19 @@ class GoveeCloudProvider(
     override suspend fun setPower(deviceId: String, sku: String, on: Boolean) =
         api.setPower(key(), sku, deviceId, on)
 
+    override suspend fun setBrightness(deviceId: String, sku: String, percent: Int) {
+        val apiKey = key()
+        // Asking for a brightness means asking for light, so power on first.
+        api.setPower(apiKey, sku, deviceId, on = true)
+        api.setBrightness(apiKey, sku, deviceId, Brightness.toGovee(percent))
+    }
+
+    override suspend fun setColor(deviceId: String, sku: String, rgb: Int) {
+        val apiKey = key()
+        api.setPower(apiKey, sku, deviceId, on = true)
+        api.setColor(apiKey, sku, deviceId, rgb)
+    }
+
     private fun List<com.arbhlabs.taprelay.data.remote.govee.GoveeDeviceDto>.toDiscovered() =
         filter { it.supportsPower }.map {
             DiscoveredDevice(
@@ -53,7 +67,9 @@ class GoveeCloudProvider(
                 sku = it.sku,
                 name = it.deviceName.ifBlank { it.sku },
                 providerId = GOVEE_PROVIDER_ID,
-                supportsPower = true
+                supportsPower = true,
+                supportsBrightness = it.supportsBrightness,
+                supportsColor = it.supportsColor
             )
         }
 }

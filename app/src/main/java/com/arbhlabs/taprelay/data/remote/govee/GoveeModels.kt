@@ -23,6 +23,12 @@ data class GoveeDeviceDto(
 ) {
     val supportsPower: Boolean
         get() = capabilities.any { it.type == "devices.capabilities.on_off" }
+
+    val supportsBrightness: Boolean
+        get() = capabilities.any { it.instance == "brightness" }
+
+    val supportsColor: Boolean
+        get() = capabilities.any { it.instance == "colorRgb" }
 }
 
 @Serializable

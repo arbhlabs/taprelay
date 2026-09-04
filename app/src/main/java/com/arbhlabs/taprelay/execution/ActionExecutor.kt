@@ -1,7 +1,10 @@
 package com.arbhlabs.taprelay.execution
 
 import android.util.Log
+import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.Brightness
+import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.Toggle
@@ -96,7 +99,10 @@ class ActionExecutor(
 
         val finalTarget: Int
         try {
-            if (tag.actionType == ActionType.TOGGLE) {
+            if (tag.actionType == ActionType.SET_BRIGHTNESS || tag.actionType == ActionType.SET_COLOR) {
+                finalTarget = Toggle.target(tag.actionType, tag.lastKnownState)
+                onFeedback(TapFeedback("${tag.friendlyName} • ${settingLabel(tag)}", isError = false, pending = true))
+            } else if (tag.actionType == ActionType.TOGGLE) {
                 onFeedback(TapFeedback("${tag.friendlyName} • Updating…", isError = false, pending = true))
                 val real = provider.getPowerState(tag.deviceId, tag.deviceSku)
                 finalTarget = if (real != null) Toggle.inverseOf(real) else Toggle.target(tag.actionType, tag.lastKnownState)
@@ -106,18 +112,52 @@ class ActionExecutor(
                 onFeedback(TapFeedback("${tag.friendlyName} • ${label(finalTarget)}", isError = false, pending = true))
             }
 
-            provider.executeAction(
-                targetId = tag.deviceId,
-                targetType = TargetType.DEVICE,
-                sku = tag.deviceSku,
-                action = tag.actionType,
-                targetState = finalTarget
-            )
+            // Every light in the group follows the primary's decision, so they move together
+            // instead of drifting apart when one of them was changed elsewhere.
+            val targets = tag.allTargets
+            var succeeded = 0
+            var firstFailure: TapException? = null
+            for (target in targets) {
+                val p = providers()[target.providerId]
+                if (p == null) {
+                    firstFailure = firstFailure ?: TapException(TapError.PROVIDER_UNAVAILABLE)
+                    continue
+                }
+                try {
+                    p.executeAction(
+                        targetId = target.deviceId,
+                        targetType = TargetType.DEVICE,
+                        sku = target.sku,
+                        action = tag.actionType,
+                        targetState = finalTarget,
+                        brightnessPercent = tag.brightnessPercent,
+                        colorRgb = tag.colorRgb
+                    )
+                    succeeded++
+                } catch (e: TapException) {
+                    firstFailure = firstFailure ?: e
+                } catch (e: Exception) {
+                    firstFailure = firstFailure ?: TapException(TapError.UNKNOWN)
+                }
+            }
+
+            if (succeeded == 0) throw firstFailure ?: TapException(TapError.UNKNOWN)
+
             tags.updateStateAndTimestamp(tag.tagId, finalTarget, System.currentTimeMillis())
-            Log.i(TAG, "ok provider=${tag.providerId} action=${tag.actionType} state=$finalTarget")
+            Log.i(
+                TAG,
+                "ok provider=${tag.providerId} action=${tag.actionType} state=$finalTarget " +
+                    "lights=$succeeded/${targets.size}"
+            )
             withContext(Dispatchers.Main) {
                 haptics.vibrateSuccess()
-                onFeedback(TapFeedback("${tag.friendlyName} • ${label(finalTarget)}", isError = false))
+                val outcome = outcomeLabel(tag, finalTarget)
+                val text = if (succeeded < targets.size) {
+                    "${tag.friendlyName} • $outcome ($succeeded of ${targets.size})"
+                } else {
+                    "${tag.friendlyName} • $outcome"
+                }
+                onFeedback(TapFeedback(text, isError = false))
             }
         } catch (e: TapException) {
             Log.w(TAG, "failed provider=${tag.providerId} error=${e.error.name}")
@@ -136,4 +176,19 @@ class ActionExecutor(
         tags.updateStateAndTimestamp(tagId, previous, System.currentTimeMillis())
 
     private fun label(state: Int) = if (state == 1) "On" else "Off"
+
+    /** What the tag is about to do, shown while the request is in flight. */
+    private fun settingLabel(tag: TagEntity) = when (tag.actionType) {
+        ActionType.SET_BRIGHTNESS ->
+            "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%…"
+        ActionType.SET_COLOR -> "${LightPresets.nameFor(tag.colorRgb ?: 0)}…"
+        else -> "Updating…"
+    }
+
+    private fun outcomeLabel(tag: TagEntity, state: Int) = when (tag.actionType) {
+        ActionType.SET_BRIGHTNESS ->
+            "Brightness ${Brightness.clampPercent(tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT)}%"
+        ActionType.SET_COLOR -> LightPresets.nameFor(tag.colorRgb ?: 0)
+        else -> label(state)
+    }
 }

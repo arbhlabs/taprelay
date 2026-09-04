@@ -7,5 +7,7 @@ data class DiscoveredDevice(
     val name: String,
     val providerId: String,
     val supportsPower: Boolean,
+    val supportsBrightness: Boolean = false,
+    val supportsColor: Boolean = false,
     val isOnline: Boolean = true
 )
