@@ -75,7 +75,7 @@ class LightSettingsTest {
 
     @Test
     fun presets_are_named_and_unknown_colours_fall_back() {
-        assertEquals("Red", LightPresets.nameFor(0xFF0000))
+        assertEquals("Red", LightPresets.nameFor(LightPresets.COLORS.first { it.name == "Red" }.rgb))
         assertEquals("Custom", LightPresets.nameFor(0x123456))
     }
 

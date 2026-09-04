@@ -9,6 +9,7 @@ import com.arbhlabs.taprelay.data.secure.TuyaCredentials
 import com.arbhlabs.taprelay.domain.model.ActionType
 import com.arbhlabs.taprelay.domain.model.powerIntent
 import com.arbhlabs.taprelay.domain.model.Brightness
+import com.arbhlabs.taprelay.domain.model.ColorMath
 import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
@@ -54,7 +55,11 @@ data class WizardState(
     /** Colour and brightness are optional extras on top of whatever the power action is. */
     val wantsColor: Boolean = false,
     val wantsBrightness: Boolean = false,
-    val colorRgb: Int = LightPresets.ALL.first().rgb,
+    val colorRgb: Int = LightPresets.DEFAULT_RGB,
+    /** Which face of the colour picker is showing: named presets or the white-temperature slider. */
+    val colorPickingWhite: Boolean = false,
+    /** Slider position for the white-temperature face, in kelvin. */
+    val whiteKelvin: Int = 2700,
     val name: String = "",
     val iconKey: String = "lamp",
     val error: String? = null,
@@ -289,8 +294,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             targetType = existing?.targetType ?: TargetType.DEVICE,
             action = existing?.actionType ?: ActionType.TOGGLE,
             brightnessPercent = existing?.brightnessPercent ?: Brightness.DEFAULT_PERCENT,
-            colorRgb = existing?.colorRgb ?: LightPresets.ALL.first().rgb,
+            colorRgb = existing?.colorRgb ?: LightPresets.DEFAULT_RGB,
             wantsColor = existing?.colorRgb != null,
+            colorPickingWhite = existing?.colorRgb?.let { ColorMath.nearestKelvin(it) != null } ?: false,
+            whiteKelvin = existing?.colorRgb?.let { ColorMath.nearestKelvin(it) } ?: 2700,
             wantsBrightness = existing?.brightnessPercent != null,
             pendingTargetIds = existing?.allTargets?.map { it.deviceId } ?: emptyList(),
             name = existing?.friendlyName ?: "",
@@ -312,8 +319,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             targetType = tag.targetType,
             action = tag.actionType,
             brightnessPercent = tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT,
-            colorRgb = tag.colorRgb ?: LightPresets.ALL.first().rgb,
+            colorRgb = tag.colorRgb ?: LightPresets.DEFAULT_RGB,
             wantsColor = tag.colorRgb != null,
+            colorPickingWhite = tag.colorRgb?.let { ColorMath.nearestKelvin(it) != null } ?: false,
+            whiteKelvin = tag.colorRgb?.let { ColorMath.nearestKelvin(it) } ?: 2700,
             wantsBrightness = tag.brightnessPercent != null,
             pendingTargetIds = tag.allTargets.map { it.deviceId },
             name = tag.friendlyName,
@@ -431,6 +440,24 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setColor(rgb: Int) { _wizard.value = _wizard.value.copy(colorRgb = rgb) }
+
+    /** Switches the colour step between the named presets and the white-temperature slider. */
+    fun setColorPickingWhite(white: Boolean) {
+        val w = _wizard.value
+        _wizard.value = if (white) {
+            w.copy(colorPickingWhite = true, colorRgb = com.arbhlabs.taprelay.domain.model.ColorMath.kelvinToRgb(w.whiteKelvin))
+        } else {
+            w.copy(colorPickingWhite = false)
+        }
+    }
+
+    fun setWhiteKelvin(kelvin: Int) {
+        val k = kelvin.coerceIn(LightPresets.MIN_KELVIN, LightPresets.MAX_KELVIN)
+        _wizard.value = _wizard.value.copy(
+            whiteKelvin = k,
+            colorRgb = com.arbhlabs.taprelay.domain.model.ColorMath.kelvinToRgb(k)
+        )
+    }
 
     fun confirmTuning() { _wizard.value = _wizard.value.copy(step = WizardStep.NAME) }
 

@@ -2,36 +2,38 @@
   "product": "TapRelay",
   "vendor": "ARBH Labs",
   "channel": "alpha",
-  "versionName": "0.0.9",
-  "versionCode": 9,
+  "versionName": "0.0.10",
+  "versionCode": 10,
   "applicationId": "com.arbhlabs.taprelay",
   "minSdk": 30,
   "targetSdk": 35,
   "date": "2026-09-04",
-  "artifact": "TapRelay-v0.0.9.apk",
-  "sha256": "1acb95d8db2c324c5c856b56e7e7aac05912de4ed840fdd1a5a879a7fefcdf66",
-  "sizeBytes": 6822794,
+  "artifact": "TapRelay-v0.0.10.apk",
+  "sha256": "bf8fe48b8a671fc74aa5303ddd171d227f3357f80c7dffdc08208b2b1f93488a",
+  "sizeBytes": 6839182,
   "signing": {
     "key": "taprelay (dedicated ARBH Labs TapRelay release key)",
     "schemes": "v2 (APK Signature Scheme v2)",
     "certSubject": "CN=ARBH Labs, OU=TapRelay, O=ARBH Labs, C=US",
     "certSha256": "7ED03578928D3B8EAEC35CF064154BEE4D48F528B0021DD3DCD9F3FDE73BA808"
   },
-  "changeSummary": "Reliability polish, no new features. Fixed the home screen showing a stale Smart Life device/scene count, and fixed 'Disconnect Smart Life' not taking effect until the app was closed.",
+  "changeSummary": "Colour polish. Fixed a brightness-only tag forcing Smart Life bulbs to white mode and wiping the colour set elsewhere (e.g. Google Home); a brightness tap now moves only the value channel when the light is in colour mode. Added 22 spectrum colours plus a Whites tab with six white points and an 1800-6500 K temperature slider (stored as plain RGB, no new capability). Gradients deferred: needs segmented hardware not available to test.",
   "verifiedOnPixel7": [
-    "carried over from 0.0.8: a tag set to Toggle + Blue + 10% on a real Smart Life lamp toggles power and applies the look only when turning on",
-    "in-place upgrade from 0.0.8 keeps existing tags, groups and credentials (Room schema unchanged, versionCode 9 > 8)"
+    "pending owner on-device pass for 0.0.10"
   ],
   "codePathVerified": [
-    "the home StateFlow now folds all five connection signals through combine(), so a device/scene count that lands after the connected flag still refreshes the card",
-    "TuyaProvider.clearCredentials() nulls the in-memory credential cache and isConnected() then returns false; covered by TuyaProviderTest"
+    "TuyaProvider.setBrightness reads work_mode: in colour mode it re-sends colour_data with the stored h/s and only a new v, and sends neither work_mode nor bright_value (LightCommandPayloadTest)",
+    "in white mode it sets bright_value and does not send work_mode",
+    "ColorMath.kelvinToRgb / nearestKelvin round-trip for the six generated white points; saturated hues are not misread as white (ColorPaletteTest)",
+    "no Room schema change; colorRgb already stores any 24-bit value, so tags from 0.0.5-0.0.9 are unaffected"
   ],
   "notVerified": [
+    "the two changes on real hardware this cycle (brightness-preserves-colour on a Smart Life lamp; the new palette and kelvin slider on a real bulb)",
     "the exact rendered hue and level at the bulb",
-    "Tuya scenes (the project has no scene subscription; the scene list is empty)",
-    "cold-start-from-killed scan latency (functional, not timed)",
-    "App Link autoVerify (needs assetlinks.json on taprelay.app)",
-    "on-device re-run of the disconnect and count-refresh flows (fixes verified by unit test and code inspection, not on hardware this cycle)"
+    "Tuya scenes (no scene subscription; the scene list is empty)",
+    "gradients / multi-colour effects (deferred; no segmented device available)",
+    "cold-start-from-killed scan latency",
+    "App Link autoVerify (needs assetlinks.json on taprelay.app)"
   ],
   "providers": {
     "govee": "cloud OpenAPI v2.0, BYOK, personal/non-profit terms",
@@ -39,8 +41,9 @@
     "googleHome": "not implemented",
     "sensibo": "not implemented",
     "goveeLan": "not implemented",
-    "matter": "not implemented"
+    "matter": "not implemented",
+    "gradients": "deferred - requires a light with addressable segments"
   },
-  "tests": "64 unit tests, 0 failures (./gradlew testReleaseUnitTest)",
-  "publicDistribution": "private alpha — keep the alpha + non-affiliation disclaimer visible"
+  "tests": "71 unit tests, 0 failures (./gradlew testReleaseUnitTest)",
+  "publicDistribution": "private alpha - keep the alpha + non-affiliation disclaimer visible"
 }

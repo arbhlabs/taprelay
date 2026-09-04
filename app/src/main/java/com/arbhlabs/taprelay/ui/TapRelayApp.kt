@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.ActionType
 import com.arbhlabs.taprelay.domain.model.Brightness
+import com.arbhlabs.taprelay.domain.model.ColorMath
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
 import com.arbhlabs.taprelay.domain.model.LightPresets
@@ -790,16 +791,31 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
 
                     if (wantsColor) {
                         Text("Which colour?", style = MaterialTheme.typography.titleMedium)
-                        LightPresets.ALL.chunked(4).forEach { row ->
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = !w.colorPickingWhite,
+                                onClick = { vm.setColorPickingWhite(false) },
+                                label = { Text("Colours") }
+                            )
+                            FilterChip(
+                                selected = w.colorPickingWhite,
+                                onClick = { vm.setColorPickingWhite(true) },
+                                label = { Text("Whites") }
+                            )
+                        }
+
+                        val swatches = if (w.colorPickingWhite) LightPresets.WHITES else LightPresets.COLORS
+                        swatches.chunked(6).forEach { rowItems ->
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                             ) {
-                                row.forEach { preset ->
+                                rowItems.forEach { preset ->
                                     val selected = w.colorRgb == preset.rgb
                                     Box(
                                         Modifier
-                                            .size(56.dp)
+                                            .size(44.dp)
                                             .clip(CircleShape)
                                             .background(Color(0xFF000000L.toInt() or preset.rgb))
                                             .border(
@@ -808,13 +824,19 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                                 else MaterialTheme.colorScheme.outlineVariant,
                                                 shape = CircleShape
                                             )
-                                            .clickable { vm.setColor(preset.rgb) },
+                                            .clickable {
+                                                if (w.colorPickingWhite) {
+                                                    ColorMath.nearestKelvin(preset.rgb)?.let { vm.setWhiteKelvin(it) }
+                                                        ?: vm.setColor(preset.rgb)
+                                                } else {
+                                                    vm.setColor(preset.rgb)
+                                                }
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         if (selected) {
                                             Icon(
-                                                Icons.Default.Check,
-                                                null,
+                                                Icons.Default.Check, null,
                                                 tint = Color.Black.copy(alpha = 0.7f)
                                             )
                                         }
@@ -822,9 +844,25 @@ private fun AddTagFlow(vm: TapRelayViewModel, nfcReady: Boolean) {
                                 }
                             }
                         }
+
+                        if (w.colorPickingWhite) {
+                            Text(
+                                "${w.whiteKelvin} K",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 12.dp)
+                            )
+                            Slider(
+                                value = w.whiteKelvin.toFloat(),
+                                onValueChange = { vm.setWhiteKelvin(it.roundToInt()) },
+                                valueRange = LightPresets.MIN_KELVIN.toFloat()..LightPresets.MAX_KELVIN.toFloat(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
                         Text(
                             LightPresets.nameFor(w.colorRgb),
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
 

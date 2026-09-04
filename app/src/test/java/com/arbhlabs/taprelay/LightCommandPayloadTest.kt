@@ -64,16 +64,54 @@ class LightCommandPayloadTest {
     }
 
     @Test
-    fun tuya_brightness_powers_on_switches_to_white_and_scales_to_the_data_point() = runTest {
+    fun tuya_brightness_in_white_mode_powers_on_and_scales_without_touching_mode() = runTest {
         val sent = mutableListOf<String>()
+        // statusJson reports work_mode = white.
         tuyaProvider(sent).setBrightness("dev1", "switch_led", 50)
 
         assertEquals(1, sent.size)
         val body = sent.single()
         assertTrue(body, body.contains(""""code":"switch_led","value":true"""))
-        assertTrue(body, body.contains(""""code":"work_mode","value":"white""""))
         // 50% of the 10..1000 data point range.
         assertTrue(body, Regex(""""code":"bright_value_v2","value":(4\d\d|5[01]\d)""").containsMatchIn(body))
+        // A brightness-only tag must not force a mode change or send a colour.
+        assertFalse(body, body.contains("work_mode"))
+        assertFalse(body, body.contains("colour_data"))
+    }
+
+    /** The bug the owner hit: a brightness-only tag reset the colour they'd set in Google Home. */
+    @Test
+    fun tuya_brightness_in_colour_mode_keeps_hue_and_saturation_and_only_moves_the_value() = runTest {
+        val colourStatus = """
+            {"success":true,"result":[
+              {"code":"switch_led","value":true},
+              {"code":"work_mode","value":"colour"},
+              {"code":"bright_value_v2","value":450},
+              {"code":"colour_data_v2","value":"{\"h\":270,\"s\":820,\"v\":900}"}
+            ]}
+        """.trimIndent()
+        val sent = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            val url = request.url.toString()
+            when {
+                url.contains("/v1.0/token") -> respond(tokenJson, HttpStatusCode.OK, jsonHeaders)
+                url.contains("/status") -> respond(colourStatus, HttpStatusCode.OK, jsonHeaders)
+                url.contains("/commands") -> { sent += bodyOf(request); respond("""{"success":true,"result":true}""", HttpStatusCode.OK, jsonHeaders) }
+                else -> respond("{}", HttpStatusCode.OK, jsonHeaders)
+            }
+        }
+        TuyaProvider(TuyaApiClient(engine), inMemoryCreds = TuyaCredentials("id", "secret", "eu", ""))
+            .setBrightness("dev1", "switch_led", 40)
+
+        val body = sent.single()
+        assertTrue(body, body.contains(""""code":"colour_data_v2""""))
+        assertTrue(body, body.contains(""""h":270"""))
+        assertTrue(body, body.contains(""""s":820"""))
+        // 40% rides on the colour's value channel...
+        assertTrue(body, Regex(""""v":(39\d|40\d|41\d)""").containsMatchIn(body))
+        // ...and nothing switches the light back to plain white.
+        assertFalse(body, body.contains("work_mode"))
+        assertFalse(body, body.contains("bright_value"))
     }
 
     @Test

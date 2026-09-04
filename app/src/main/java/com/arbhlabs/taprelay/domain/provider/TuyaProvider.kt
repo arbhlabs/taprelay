@@ -15,8 +15,13 @@ import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.TapException
 import com.arbhlabs.taprelay.domain.model.TargetType
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 const val TUYA_PROVIDER_ID = "tuya_cloud"
@@ -166,20 +171,58 @@ class TuyaProvider(
     }
 
     override suspend fun setBrightness(deviceId: String, sku: String, percent: Int) {
-        val codes = dataPoints(deviceId).map { it.code }
-        val brightCode = codes.firstOrNull { it.startsWith(BRIGHTNESS_PREFIX) }
-            ?: throw TapException(TapError.UNSUPPORTED_ACTION)
+        val status = dataPoints(deviceId)
+        val codes = status.map { it.code }
         val powerCode = codes.firstOrNull { TuyaDeviceDto.isPowerDp(it) }
             ?: sku.takeIf { it.isNotBlank() && it != "tuya_device" }
+        val mode = status.firstOrNull { it.code == WORK_MODE }
+            ?.value?.let { (it as? JsonPrimitive)?.contentOrNull ?: it.toString().trim('"') }
+            ?.lowercase()
+        val colorCode = codes.firstOrNull { it.startsWith(COLOR_PREFIX) }
 
+        // A brightness-only tag must not disturb the colour the bulb is already showing —
+        // the user may have set it from Google Home or the Smart Life app. In colour mode
+        // the brightness IS the colour's own value channel, so change only that and leave
+        // hue and saturation exactly where they are. Forcing work_mode=white here is what
+        // used to knock the light back to plain white.
+        if (mode == "colour" && colorCode != null) {
+            val (h, s) = currentHueSat(status, colorCode)
+            val commands = buildList {
+                powerCode?.let { add(TuyaCommandItem(it, JsonPrimitive(true))) }
+                add(
+                    TuyaCommandItem(
+                        colorCode,
+                        buildJsonObject {
+                            put("h", h)
+                            put("s", s)
+                            put("v", Brightness.toTuyaColorValue(percent))
+                        }
+                    )
+                )
+            }
+            send(deviceId, commands)
+            return
+        }
+
+        // White mode (or a light with no colour mode at all): the plain brightness data point.
+        val brightCode = codes.firstOrNull { it.startsWith(BRIGHTNESS_PREFIX) }
+            ?: throw TapException(TapError.UNSUPPORTED_ACTION)
         val commands = buildList {
             // Asking for a brightness means asking for light.
             powerCode?.let { add(TuyaCommandItem(it, JsonPrimitive(true))) }
-            // Brightness only applies in white mode; in colour mode the value rides on the colour.
-            if (codes.contains(WORK_MODE)) add(TuyaCommandItem(WORK_MODE, JsonPrimitive("white")))
             add(TuyaCommandItem(brightCode, JsonPrimitive(Brightness.toTuya(percent))))
         }
         send(deviceId, commands)
+    }
+
+    /** Reads the hue and saturation the light is currently set to, defaulting to a plain warm value. */
+    private fun currentHueSat(status: List<TuyaDeviceStatusDto>, colorCode: String): Pair<Int, Int> {
+        val el = status.firstOrNull { it.code == colorCode }?.value ?: return 0 to 1000
+        val raw = (el as? JsonPrimitive)?.contentOrNull ?: el.toString().trim('"')
+        return runCatching {
+            val obj = Json.parseToJsonElement(raw).jsonObject
+            (obj["h"]?.jsonPrimitive?.intOrNull ?: 0) to (obj["s"]?.jsonPrimitive?.intOrNull ?: 1000)
+        }.getOrDefault(0 to 1000)
     }
 
     override suspend fun setColor(deviceId: String, sku: String, rgb: Int) {

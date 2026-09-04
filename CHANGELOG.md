@@ -1,5 +1,36 @@
 # TapRelay Changelog
 
+## v0.0.10 - 2026-09-04 (Alpha / Internal Test)
+
+**Colour polish.** A brightness tap no longer steals your colour, and the colour picker grew up.
+
+### Fixed
+- **A brightness-only tag keeps the colour the light is already showing.** On Smart Life lamps,
+  setting a brightness used to force the bulb into plain white mode — so a tag meant only to dim
+  a light would wipe out a colour you'd set from Google Home or the Smart Life app. TapRelay now
+  reads what mode the light is in: if it's showing a colour, only the brightness of that colour
+  changes; hue and saturation are left exactly where they were. This also fixes brightness taps
+  that "didn't take" — the mode flip was what was fighting them.
+
+### Added
+- **A much bigger colour palette.** 22 named colours around the full wheel (red through amber,
+  green, teal, cyan, the blues, violet, magenta, pink), plus a dedicated **Whites** tab with six
+  named white points and a warm-to-cool temperature slider from 1800 K to 6500 K. The white
+  slider is stored as an ordinary colour, so it works on every Govee and Smart Life bulb without
+  any extra setup.
+- The colour step remembers whether a tag's colour is a named colour or a white, and reopens on
+  the right tab when you edit it.
+
+### Not in this build
+- **Gradients / multi-colour effects.** These need a light with addressable segments (a strip or
+  a panel). None of the single-colour bulbs this alpha has been tested against can render one, so
+  gradient support is deferred until it can be built and verified on real segmented hardware.
+
+### Unchanged
+- The sticker still stores only the opaque App Link. Tags saved by 0.0.5 to 0.0.9 keep working;
+  no database change.
+- Private alpha. Not affiliated with Govee, Tuya, Smart Life or Google.
+
 ## v0.0.9 - 2026-09-04 (Alpha / Internal Test)
 
 **Reliability polish.** No new features — two fixes to things that quietly did the wrong thing.

@@ -3,27 +3,28 @@
 TapRelay is published as a **private alpha** on arbhlabs.com through the standard ARBH Labs
 release pipeline. The disclaimer copy below is required on the download page and is live there.
 
-## Current release — v0.0.9 (2026-09-04)
+## Current release — v0.0.10 (2026-09-04)
 
-- `TapRelay-v0.0.9.apk` — signed release, SHA-256
-  `1acb95d8db2c324c5c856b56e7e7aac05912de4ed840fdd1a5a879a7fefcdf66`, 6,822,794 bytes,
-  versionCode 9
-- `TapRelay-v0.0.9.apk.sha256`, `release-metadata.json`, `../docs/QA-v0.0.9.md`
-- Reliability polish only: fixed a stale Smart Life device/scene count on the home screen and
-  a "Disconnect Smart Life" that did not take effect until the app was closed. No schema change.
+- `TapRelay-v0.0.10.apk` — signed release, SHA-256
+  `bf8fe48b8a671fc74aa5303ddd171d227f3357f80c7dffdc08208b2b1f93488a`, 6,839,182 bytes,
+  versionCode 10
+- `TapRelay-v0.0.10.apk.sha256`, `release-metadata.json`, `../docs/QA-v0.0.10.md`
+- Colour polish: brightness-only tags no longer knock Smart Life bulbs to white / wipe the
+  colour set elsewhere; 22 spectrum colours + a Whites tab with an 1800–6500 K slider. Gradients
+  deferred (needs segmented hardware). No schema change.
 
 Live URLs (all serve the exact bytes above, verify by download):
 - https://arbhlabs.com/taprelay/
-- https://arbhlabs.com/downloads/TapRelay-0.0.9.apk
+- https://arbhlabs.com/downloads/TapRelay-0.0.10.apk
 - https://arbhlabs.com/downloads/TapRelay.apk
 - https://arbhlabs.com/downloads/TapRelay-latest.apk
 
 R2 objects in `arbh-releases`:
-- `taprelay/releases/0.0.9/TapRelay-0.0.9.apk` (immutable)
+- `taprelay/releases/0.0.10/TapRelay-0.0.10.apk` (immutable)
 - `taprelay/latest/TapRelay.apk`, `taprelay/latest/TapRelay-latest.apk` (aliases)
 
 ### Prior releases
-0.0.8 (vc8), 0.0.7 (vc7), 0.0.6 (vc6), 0.0.5 (vc5), 0.0.4 (vc4), 0.0.2 (vc2) — see git tags and `../docs/`.
+0.0.9 (vc9), 0.0.8 (vc8), 0.0.7 (vc7), 0.0.6 (vc6), 0.0.5 (vc5), 0.0.4 (vc4), 0.0.2 (vc2) — see git tags and `../docs/`.
 
 ## Publish steps (from the ARBH-Labs-Website repo root)
 
