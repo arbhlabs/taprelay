@@ -115,9 +115,18 @@ class ControllerInputProcessor(
         return null
     }
 
+    /**
+     * One physical pull is one action.
+     *
+     * An Xbox trigger is an analog axis, not a button, and it does not arrive as a clean step: the
+     * value climbs, wobbles, and drifts back. A single threshold would fire again on every wobble
+     * across it, so activation and release use different thresholds. Once armed the trigger stays
+     * armed - producing nothing - until the axis falls all the way below [TRIGGER_RELEASE], which
+     * only happens when the finger actually comes off.
+     */
     fun processTriggerAxes(lTriggerVal: Float, rTriggerVal: Float): ControllerInput? {
-        val lActive = lTriggerVal >= 0.6f
-        val rActive = rTriggerVal >= 0.6f
+        val lActive = if (prevLTriggerActive) lTriggerVal > TRIGGER_RELEASE else lTriggerVal >= TRIGGER_ACTIVATE
+        val rActive = if (prevRTriggerActive) rTriggerVal > TRIGGER_RELEASE else rTriggerVal >= TRIGGER_ACTIVATE
 
         var triggerKey: String? = null
         if (!prevLTriggerActive && lActive) {
@@ -158,6 +167,12 @@ class ControllerInputProcessor(
     }
 
     companion object {
+        /** Pulled far enough to count. Deliberately past halfway so a resting finger never fires. */
+        const val TRIGGER_ACTIVATE = 0.65f
+
+        /** Released far enough to re-arm. The gap to [TRIGGER_ACTIVATE] is the hysteresis band. */
+        const val TRIGGER_RELEASE = 0.30f
+
         fun isGameControllerEvent(source: Int, device: InputDevice?): Boolean {
             val hasGamepadSource = (source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
             val hasJoystickSource = (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK

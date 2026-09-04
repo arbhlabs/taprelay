@@ -1,5 +1,43 @@
 # TapRelay Changelog
 
+## v0.1.4 - 2026-09-04 (Alpha / Internal Test)
+
+**Your controller can log to LastDose.** Pull the right trigger and one entry lands in LastDose -
+the app never opens, nothing is navigated, nothing is tapped for you.
+
+### Added
+- **LastDose logs as TapRelay items.** Pick a LastDose log, set the amount, save. It becomes an
+  ordinary TapRelay item, so the same thing that binds a lamp to a controller button, an NFC tag
+  or a place binds a log: `Right Trigger -> Bowl +1`. Under **LastDose Logs** in the menu.
+- **Direct, background logging.** TapRelay asks LastDose to write the entry through LastDose's own
+  canonical log path - the same one its on-screen LOG NOW button and its NFC tags use. There is no
+  second logging implementation and no UI automation. TapRelay reports success only after LastDose
+  has confirmed the entry exists.
+- Needs LastDose 7.1.10 or later. The link is signature-pinned in both directions: no other app can
+  use it, and TapRelay says plainly when LastDose is missing, too old, or the log has been deleted.
+
+### Fixed
+- **One trigger pull is one action.** Xbox triggers are analog axes, not buttons: the value climbs,
+  wobbles and drifts. A single threshold could fire again on every wobble across it, so activation
+  and release now use separate thresholds. Holding a trigger produces exactly one action; releasing
+  re-arms it for a deliberate second pull.
+
+## v0.1.3 - unreleased (folded into 0.1.4)
+
+**Everything is free.** No subscription, no trial, no five-tag limit, nothing to unlock.
+
+TapRelay reaches your lights and climate devices through Govee and Tuya developer keys you
+generate yourself, and both of those APIs are licensed for personal, non-commercial use. A paid
+tier gating access to them does not fit that licence, so the paywall is gone rather than quietly
+left in place.
+
+Unlimited tags, multi-device routines, time-of-day windows, diagnostics and replay, activation
+modes, Quick Controls, Remote Mode, controller mappings and Places are all simply part of the app.
+The licence plumbing is left intact but inert, so an existing stored licence still reads cleanly
+and no capability depends on one.
+
+This version was built and tested but never published; everything in it ships in 0.1.4.
+
 ## v0.1.2 - 2026-09-04 (Alpha / Internal Test)
 
 **A tap doesn't have to mean "do it now".** Every trigger now has an activation mode, your

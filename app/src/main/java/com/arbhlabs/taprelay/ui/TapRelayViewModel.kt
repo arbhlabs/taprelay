@@ -673,14 +673,6 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         val id = w.tagId ?: return@launch
         _wizard.value = w.copy(busy = true)
         val existing = services.tagRepository.getTagById(id)
-        val currentTags = services.tagRepository.getAllTags().first()
-        if (existing == null && currentTags.size >= 5 && !services.entitlementRepository.canAccess(TapRelayProFeature.MULTI_DEVICE_ROUTINES)) {
-            _wizard.value = w.copy(
-                busy = false,
-                error = "Free tier limit reached (5 active tags). Upgrade to Pro or start your 7-day free trial for unlimited tags."
-            )
-            return@launch
-        }
 
         val entity = if (w.targetType == TargetType.SCENE) {
             val scene = w.scene ?: return@launch
@@ -903,6 +895,74 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     fun deletePlace(trigger: PlaceTriggerEntity) = viewModelScope.launch {
         services.placeTriggerDao.delete(trigger)
         syncGeofences()
+    }
+
+    // ---- LastDose logs as TapRelay items ----
+
+    /** What the LastDose picker knows right now. Null means "not looked yet". */
+    private val _lastDoseItems = MutableStateFlow<List<com.arbhlabs.taprelay.execution.lastdose.LastDoseItem>?>(null)
+    val lastDoseItems: StateFlow<List<com.arbhlabs.taprelay.execution.lastdose.LastDoseItem>?> = _lastDoseItems.asStateFlow()
+
+    /** Null until checked; false when LastDose is missing or predates the logging contract. */
+    private val _lastDoseAvailable = MutableStateFlow<Boolean?>(null)
+    val lastDoseAvailable: StateFlow<Boolean?> = _lastDoseAvailable.asStateFlow()
+
+    /** Reads across a process boundary, so never on the main thread. */
+    fun refreshLastDose() = viewModelScope.launch {
+        val (available, items) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val available = services.lastDoseClient.isAvailable()
+            available to if (available) services.lastDoseClient.items() else emptyList()
+        }
+        _lastDoseAvailable.value = available
+        _lastDoseItems.value = items
+    }
+
+    /**
+     * Saves a LastDose log as an ordinary TapRelay item, so every trigger type can already fire it.
+     * Editing an existing one keeps its id, and with it every controller mapping and NFC tag
+     * already pointing at it.
+     */
+    fun saveLastDoseItem(
+        existing: TagEntity?,
+        lastDoseItemId: Long,
+        lastDoseItemName: String,
+        amount: String,
+        unit: String,
+        friendlyName: String
+    ) = viewModelScope.launch {
+        val name = friendlyName.ifBlank { lastDoseItemName.ifBlank { "LastDose log" } }
+        val entity = (existing ?: TagEntity(
+            tagId = "ld-" + java.util.UUID.randomUUID().toString(),
+            friendlyName = name,
+            iconKey = "lastdose",
+            providerId = "lastdose",
+            deviceId = lastDoseItemId.toString(),
+            deviceSku = "",
+            actionType = ActionType.TURN_ON
+        )).copy(
+            friendlyName = name,
+            targetType = TargetType.LASTDOSE_LOG,
+            deviceId = lastDoseItemId.toString(),
+            lastDoseItemId = lastDoseItemId,
+            lastDoseItemName = lastDoseItemName,
+            lastDoseAmount = amount.trim().ifBlank { null },
+            lastDoseUnit = unit.trim().ifBlank { null }
+        )
+        if (existing == null) services.tagRepository.upsert(entity) else services.tagRepository.update(entity)
+        services.haptics.vibrateSuccess()
+    }
+
+    fun deleteLastDoseItem(tag: TagEntity) = viewModelScope.launch {
+        services.tagRepository.delete(tag)
+    }
+
+    /** Fires an item from the app so a mapping can be proved without a controller or a tag. */
+    fun testItem(tag: TagEntity) {
+        services.triggerRouter.fire(
+            tagId = tag.tagId,
+            override = ActivationMode.EXECUTE,
+            source = TriggerSource.IN_APP
+        ) { fb -> showPill(fb) }
     }
 
     // ---- Game Controller Remote Integration ----

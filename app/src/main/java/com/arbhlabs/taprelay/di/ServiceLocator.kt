@@ -37,7 +37,8 @@ class ServiceLocator(context: Context) {
         AppDatabase.MIGRATION_5_6,
         AppDatabase.MIGRATION_6_7,
         AppDatabase.MIGRATION_7_8,
-        AppDatabase.MIGRATION_8_9
+        AppDatabase.MIGRATION_8_9,
+        AppDatabase.MIGRATION_9_10
     )
      // No destructive fallback: a missing migration must fail loudly rather than
      // silently deleting every tag mapping the owner has set up.
@@ -70,12 +71,16 @@ class ServiceLocator(context: Context) {
 
     val haptics = HapticsManager(appContext)
 
+    /** Cross-app logging into LastDose. Absent LastDose, every call simply reports unavailable. */
+    val lastDoseClient = com.arbhlabs.taprelay.execution.lastdose.LastDoseClient(appContext)
+
     val actionExecutor = ActionExecutor(
         tags = tagRepository,
         providers = { providers },
         haptics = haptics,
         tapLogDao = tapLogDao,
-        entitlements = entitlementRepository
+        entitlements = entitlementRepository,
+        lastDose = lastDoseClient
     )
 
     /** trigger -> item -> activation mode -> execute / open item / Quick Controls. */

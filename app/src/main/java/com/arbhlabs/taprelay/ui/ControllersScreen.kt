@@ -603,7 +603,8 @@ fun ControllersScreen(
                                                     else MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
-                                                    tag.providerId.replaceFirstChar { it.uppercase() },
+                                                    if (tag.isLastDose) "LastDose log"
+                                                    else tag.providerId.replaceFirstChar { it.uppercase() },
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.outline
                                                 )

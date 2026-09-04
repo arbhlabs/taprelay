@@ -48,8 +48,19 @@ data class TagEntity(
      * What a trigger does when it resolves to this item. Null reads as
      * [ActivationMode.EXECUTE], which is what every tag written before 0.1.1 meant.
      */
-    val activationMode: ActivationMode? = null
+    val activationMode: ActivationMode? = null,
+    /**
+     * Set only when [targetType] is [TargetType.LASTDOSE_LOG]: which LastDose log this item writes
+     * to and how much. Nullable so every tag saved before 0.1.4 keeps behaving exactly as it did.
+     */
+    val lastDoseItemId: Long? = null,
+    val lastDoseItemName: String? = null,
+    val lastDoseAmount: String? = null,
+    val lastDoseUnit: String? = null
 ) {
+    /** True when this item logs to LastDose rather than driving a device. */
+    val isLastDose: Boolean
+        get() = targetType == TargetType.LASTDOSE_LOG
     /** What a trigger does with this item, with the pre-0.1.1 default filled in. */
     val activation: ActivationMode
         get() = activationMode ?: ActivationMode.EXECUTE

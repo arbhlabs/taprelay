@@ -83,9 +83,15 @@ class EntitlementRepository(
         }
     }
 
-    fun canAccess(feature: TapRelayProFeature): Boolean {
-        return _isPro.value
-    }
+    /**
+     * Every feature is free.
+     *
+     * The Govee and Tuya developer APIs TapRelay is built on are licensed for personal,
+     * non-commercial use, which a paid tier gating access to them does not fit. The licensing
+     * plumbing below is left intact and inert rather than ripped out, so nothing that reads a
+     * stored licence breaks, but no capability depends on it.
+     */
+    fun canAccess(feature: TapRelayProFeature): Boolean = true
 
     fun isTrialActive(): Boolean {
         val lic = _proLicense.value ?: return false

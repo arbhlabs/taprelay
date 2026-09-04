@@ -18,6 +18,14 @@
         android:name="android.hardware.nfc"
         android:required="true" />
 
+    <!-- Logging into LastDose without opening it. The provider on the other side also pins our signature. -->
+    <uses-permission android:name="com.lastdose.app.permission.EXTERNAL_ACTION" />
+
+    <!-- Android 11+ package visibility: without this the LastDose provider is simply invisible. -->
+    <queries>
+        <package android:name="com.lastdose.app" />
+    </queries>
+
     <application
         android:name=".TapRelayApplication"
         android:allowBackup="false"

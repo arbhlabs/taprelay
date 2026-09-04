@@ -14,6 +14,8 @@ import com.arbhlabs.taprelay.domain.provider.SmartHomeProvider
 import com.arbhlabs.taprelay.domain.repository.TagRepository
 import com.arbhlabs.taprelay.data.local.dao.TapLogDao
 import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
+import com.arbhlabs.taprelay.execution.lastdose.LastDoseClient
+import com.arbhlabs.taprelay.execution.lastdose.LastDoseResult
 import com.arbhlabs.taprelay.monetization.EntitlementRepository
 import com.arbhlabs.taprelay.monetization.TapRelayProFeature
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +42,8 @@ class ActionExecutor(
     private val debounceMs: Long = 1500L,
     private val tapLogDao: TapLogDao? = null,
     private val entitlements: EntitlementRepository? = null,
+    /** Present only where LastDose logging is wired; null in tests and on the smart-home-only path. */
+    private val lastDose: LastDoseClient? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     private val lastFired = HashMap<String, Long>()
@@ -47,6 +51,9 @@ class ActionExecutor(
     private companion object {
         /** Outcome logging for field diagnostics. Never records tag names or credentials. */
         const val TAG = "TapRelayExec"
+
+        /** Not a SmartHomeProvider - just how a LastDose row is labelled in tap history. */
+        const val LASTDOSE_PROVIDER_ID = "lastdose"
     }
 
     fun executeByTagId(tagId: String, onFeedback: (TapFeedback) -> Unit) {
@@ -78,6 +85,13 @@ class ActionExecutor(
             return
         }
         haptics.vibrateClick()
+
+        // A LastDose item is not a device: no provider, no power state, no toggle. It leaves the
+        // shared route here and rejoins it at the same feedback and tap-history the lamps use.
+        if (rawTag.isLastDose) {
+            runLastDoseLog(rawTag, startTime, onFeedback)
+            return
+        }
 
         // Pro: Context-aware time-of-day condition evaluation
         val tag = if (rawTag.timeConditionEnabled && (entitlements == null || entitlements.canAccess(TapRelayProFeature.TIME_OF_DAY_CONDITIONS))) {
@@ -349,6 +363,59 @@ class ActionExecutor(
             haptics.vibrateError()
             onFeedback(TapFeedback(TapError.UNKNOWN.message, isError = true))
         }
+    }
+
+    /**
+     * Writes one log into LastDose without LastDose ever appearing. The request id is derived from
+     * the item and a coarse time slice, so a duplicated delivery of the same physical press is
+     * recognised on the LastDose side and cannot produce a second entry.
+     */
+    private suspend fun runLastDoseLog(tag: TagEntity, startTime: Long, onFeedback: (TapFeedback) -> Unit) {
+        val client = lastDose
+        val itemId = tag.lastDoseItemId ?: 0L
+        val display = tag.lastDoseItemName?.takeIf { it.isNotBlank() } ?: tag.friendlyName
+        if (client == null || itemId <= 0L) {
+            haptics.vibrateError()
+            onFeedback(TapFeedback("That LastDose log is no longer set up.", isError = true))
+            return
+        }
+        onFeedback(TapFeedback("$display • Logging…", isError = false, pending = true))
+
+        val requestId = "${tag.tagId}:${startTime / 1000L}"
+        val result = client.log(itemId, tag.lastDoseAmount, tag.lastDoseUnit, requestId)
+        val duration = System.currentTimeMillis() - startTime
+
+        val (text, isError) = when (result) {
+            is LastDoseResult.Logged -> logSummary(display, result.amount, result.unit) to false
+            // The log the owner asked for exists; a repeated delivery is still that one success.
+            is LastDoseResult.Duplicate -> logSummary(display, tag.lastDoseAmount.orEmpty(), tag.lastDoseUnit.orEmpty()) to false
+            is LastDoseResult.Failed -> result.message to true
+        }
+
+        tapLogDao?.insert(
+            TapLogEntity(
+                tagId = tag.tagId,
+                tagName = tag.friendlyName,
+                providerId = LASTDOSE_PROVIDER_ID,
+                actionDescription = if (isError) "LastDose log failed" else "Logged to LastDose",
+                success = !isError,
+                errorMessage = if (isError) text else null,
+                durationMs = duration
+            )
+        )
+        if (!isError) tags.updateStateAndTimestamp(tag.tagId, 1, System.currentTimeMillis())
+        Log.i(TAG, "lastdose ok=${!isError} (${duration}ms)")
+
+        withContext(Dispatchers.Main) {
+            if (isError) haptics.vibrateError() else haptics.vibrateSuccess()
+            onFeedback(TapFeedback(text, isError = isError))
+        }
+    }
+
+    /** "Bowl +1 logged" - the amount only when there is one, never the raw contract. */
+    private fun logSummary(name: String, amount: String, unit: String): String {
+        val qualifier = listOf(amount, unit).filter { it.isNotBlank() }.joinToString(" ")
+        return if (qualifier.isBlank()) "$name logged" else "$name $qualifier logged"
     }
 
     private suspend fun revert(tagId: String, previous: Int) =

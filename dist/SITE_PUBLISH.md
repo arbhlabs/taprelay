@@ -3,7 +3,33 @@
 TapRelay is published as a **private alpha** on arbhlabs.com through the standard ARBH Labs
 release pipeline. The disclaimer copy below is required on the download page and is live there.
 
-## Current release — v0.1.2 (2026-09-04)
+## Current release — v0.1.4 (2026-09-04)
+
+- `TapRelay-v0.1.4.apk` — signed release, SHA-256
+  `53c3ff7f58f07467f82a4df8b629441e08b29dafbe4f733a14274b1b10754ba1`, 7,747,951 bytes,
+  versionCode 15, DB schema 10
+- `TapRelay-v0.1.4.apk.sha256`, `../docs/QA-v0.1.4.md`
+- Controller / NFC / place triggers can log straight into LastDose without LastDose opening, via
+  LastDose 7.1.10's signature-pinned `ExternalActionProvider`. Analog trigger handling gains
+  hysteresis, so one Xbox trigger pull is exactly one action. Rolls up the unreleased 0.1.3
+  (paywall removed entirely).
+- **Needs LastDose 7.1.10 or later for the logging link.** LastDose 7.1.10 is built and signed but
+  NOT yet published (7.1.9 is still awaiting device validation and would ship with it).
+
+Live URLs (all serve the exact bytes above, verified by download):
+- https://arbhlabs.com/taprelay/
+- https://arbhlabs.com/downloads/TapRelay-0.1.4.apk
+- https://arbhlabs.com/downloads/TapRelay.apk
+- https://arbhlabs.com/downloads/TapRelay-latest.apk
+
+R2 objects in `arbh-releases`:
+- `taprelay/releases/0.1.4/TapRelay-0.1.4.apk` (immutable)
+- `taprelay/latest/TapRelay.apk`, `taprelay/latest/TapRelay-latest.apk` (aliases)
+
+> 0.1.3 (vc14) was built and tested but never published, so nothing was overwritten: 0.1.4 is the
+> next published version and 0.1.2's bytes are untouched.
+
+## Previous release — v0.1.2 (2026-09-04)
 
 - `TapRelay-v0.1.2.apk` — signed release, SHA-256
   `4c3ac382f5ac4d55f8230f6ae24f3d6372a20cf59be994f2bbc58b9bc7a00021`, 7,715,111 bytes,

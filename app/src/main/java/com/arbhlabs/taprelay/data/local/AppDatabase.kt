@@ -21,7 +21,7 @@ import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
         ControllerMappingEntity::class,
         PlaceTriggerEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -124,6 +124,19 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        /**
+         * 0.1.4: an item can log to LastDose instead of driving a device. Every column is
+         * nullable and targetType keeps its 'DEVICE' default, so existing tags are untouched.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tags ADD COLUMN lastDoseItemId INTEGER")
+                db.execSQL("ALTER TABLE tags ADD COLUMN lastDoseItemName TEXT")
+                db.execSQL("ALTER TABLE tags ADD COLUMN lastDoseAmount TEXT")
+                db.execSQL("ALTER TABLE tags ADD COLUMN lastDoseUnit TEXT")
             }
         }
 

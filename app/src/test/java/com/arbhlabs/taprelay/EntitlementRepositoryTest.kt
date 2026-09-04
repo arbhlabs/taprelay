@@ -18,13 +18,12 @@ class EntitlementRepositoryTest {
     private val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
 
     @Test
-    fun default_tier_is_free() = runTest {
+    fun every_feature_is_free_without_a_licence() = runTest {
+        // The Govee and Tuya developer APIs are licensed for personal, non-commercial use,
+        // so nothing in TapRelay may sit behind a paywall: no stored licence, everything on.
         val repo = EntitlementRepository()
         assertFalse(repo.isPro.value)
-        assertFalse(repo.canAccess(TapRelayProFeature.MULTI_DEVICE_ROUTINES))
-        assertFalse(repo.canAccess(TapRelayProFeature.TIME_OF_DAY_CONDITIONS))
-        assertFalse(repo.canAccess(TapRelayProFeature.TAP_DIAGNOSTICS_REPLAY))
-        assertFalse(repo.canAccess(TapRelayProFeature.TAG_STORE_DISCOUNT))
+        TapRelayProFeature.entries.forEach { assertTrue(repo.canAccess(it)) }
     }
 
     @Test

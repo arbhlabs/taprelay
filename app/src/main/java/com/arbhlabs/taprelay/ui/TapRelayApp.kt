@@ -68,6 +68,7 @@ import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.SENSIBO_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
+import com.arbhlabs.taprelay.ui.lastdose.LastDoseScreen
 import com.arbhlabs.taprelay.ui.places.PlacesScreen
 import com.arbhlabs.taprelay.ui.quick.QuickControlsSheet
 import kotlin.math.roundToInt
@@ -78,7 +79,8 @@ val ICONS: Map<String, ImageVector> = mapOf(
     "plug" to Icons.Default.Power,
     "switch" to Icons.Default.Bolt,
     "scene" to Icons.Default.AutoAwesome,
-    "air" to Icons.Default.Air
+    "air" to Icons.Default.Air,
+    "lastdose" to Icons.Default.Bolt
 )
 
 fun iconFor(key: String) = ICONS[key] ?: Icons.Default.Lightbulb
@@ -99,6 +101,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
     var showNfcStore by rememberSaveable { mutableStateOf(false) }
     var showControllers by rememberSaveable { mutableStateOf(false) }
     var showPlaces by rememberSaveable { mutableStateOf(false) }
+    var showLastDose by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -125,6 +128,12 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     onDone = { showControllers = false }
                 )
 
+            showLastDose ->
+                LastDoseScreen(
+                    vm = vm,
+                    onDone = { showLastDose = false }
+                )
+
             showPlaces ->
                 PlacesScreen(
                     vm = vm,
@@ -134,7 +143,9 @@ fun TapRelayApp(vm: TapRelayViewModel) {
             else ->
                 HomeScreen(
                     vm = vm,
-                    tags = ui.tags,
+                    // LastDose logs are items too, but they belong on their own screen rather
+                    // than in a list of lamps whose card offers brightness and colour.
+                    tags = ui.tags.filterNot { it.isLastDose },
                     goveeConnected = ui.goveeConnected,
                     tuyaConnected = ui.tuyaConnected,
                     sensiboConnected = ui.sensiboConnected,
@@ -143,6 +154,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     onOpenConnections = { showConnections = true },
                     onOpenControllers = { showControllers = true },
                     onOpenPlaces = { showPlaces = true },
+                    onOpenLastDose = { showLastDose = true },
                     onOpenPro = { showProDialog = true },
                     onOpenDiagnostics = { showDiagnostics = true },
                     onOpenNfcStore = { showNfcStore = true }
@@ -552,6 +564,7 @@ private fun HomeScreen(
     onOpenConnections: () -> Unit,
     onOpenControllers: () -> Unit,
     onOpenPlaces: () -> Unit,
+    onOpenLastDose: () -> Unit,
     onOpenPro: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenNfcStore: () -> Unit
@@ -570,21 +583,6 @@ private fun HomeScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("TapRelay")
-                        if (isPro) {
-                            Spacer(Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    "PRO",
-                                    Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
                     }
                 },
                 actions = {
@@ -618,6 +616,11 @@ private fun HomeScreen(
                             text = { Text("Controllers & Remotes") },
                             leadingIcon = { Icon(Icons.Default.SportsEsports, null, tint = MaterialTheme.colorScheme.primary) },
                             onClick = { menuOpen = false; onOpenControllers() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("LastDose Logs") },
+                            leadingIcon = { Icon(Icons.Default.Bolt, null) },
+                            onClick = { menuOpen = false; onOpenLastDose() }
                         )
                         DropdownMenuItem(
                             text = { Text("Places & Routines") },
@@ -655,13 +658,7 @@ private fun HomeScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = {
-                    if (tags.size >= 5 && !isPro) {
-                        onOpenPro()
-                    } else {
-                        vm.startWizard()
-                    }
-                },
+                onClick = { vm.startWizard() },
                 icon = { Icon(Icons.Default.Add, null) },
                 text = { Text("Add Tag") }
             )
@@ -733,15 +730,10 @@ private fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isPro) "${tags.size} Active Tags (Pro)" else "${tags.size} / 5 Free Tags",
+                        text = if (tags.size == 1) "1 active tag" else "${tags.size} active tags",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.outline
                     )
-                    if (!isPro) {
-                        TextButton(onClick = onOpenPro, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                            Text("Upgrade", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
                 }
                 tags.forEach { tag ->
                     ElevatedCard(
@@ -981,34 +973,23 @@ private fun AddTagFlow(
 
                             if (w.selectedDevices.size > 1) {
                                 Card(
-                                    colors = CardDefaults.cardColors(containerColor = if (isPro) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                                 ) {
                                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.width(8.dp))
-                                        Column {
-                                            Text(
-                                                if (isPro) "Multi-Target Routine Active (${w.selectedDevices.size} devices)" else "Multi-Target Routine (Pro Feature)",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            if (!isPro) {
-                                                Text(
-                                                    "Controlling multiple devices from one tag requires TapRelay Pro.",
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
-                                        }
+                                        Text(
+                                            "One tag, ${w.selectedDevices.size} devices",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                             }
 
                             Button(
-                                onClick = {
-                                    if (w.selectedDevices.size > 1 && !isPro) onOpenPro()
-                                    else vm.continueFromDevices()
-                                },
+                                onClick = { vm.continueFromDevices() },
                                 enabled = w.selectedDevices.isNotEmpty(),
                                 modifier = Modifier.fillMaxWidth().height(52.dp).padding(top = 8.dp)
                             ) {
@@ -1191,18 +1172,12 @@ private fun AddTagFlow(
 
                     // Pro Feature: Context-Aware Time-of-Day Condition
                     ExtraToggleRow(
-                        label = "Time-of-day condition (Pro)",
+                        label = "Time-of-day condition",
                         hint = if (w.timeConditionEnabled)
                             "Active ${String.format("%02d:%02d", w.startHour, w.startMinute)} – ${String.format("%02d:%02d", w.endHour, w.endMinute)}"
                         else "Only trigger this action during specific hours",
                         checked = w.timeConditionEnabled,
-                        onCheckedChange = { checked ->
-                            if (checked && !isPro) {
-                                onOpenPro()
-                            } else {
-                                vm.setTimeConditionEnabled(checked)
-                            }
-                        }
+                        onCheckedChange = { checked -> vm.setTimeConditionEnabled(checked) }
                     )
 
                     if (w.timeConditionEnabled) {
@@ -1634,6 +1609,12 @@ private fun NfcPulse() {
 
 /** What a saved tag does, including fan speed, brightness or colour it was given. */
 private fun tagActionSummary(tag: TagEntity): String {
+    if (tag.isLastDose) {
+        val qualifier = listOf(tag.lastDoseAmount.orEmpty(), tag.lastDoseUnit.orEmpty())
+            .filter { it.isNotBlank() }.joinToString(" ")
+        val name = tag.lastDoseItemName.orEmpty().ifBlank { "log" }
+        return if (qualifier.isBlank()) "LastDose • $name" else "LastDose • $name $qualifier"
+    }
     if (tag.actionType == ActionType.TOGGLE_FAN_SPEED) {
         val count = tag.allTargets.size
         return if (count > 1) "Fan Low ↔ High • $count devices" else "Fan Low ↔ High"
