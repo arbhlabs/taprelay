@@ -26,7 +26,7 @@
     "Govee discovery and Toggle still work and were left in their original state"
   ],
   "notVerified": [
-    "Accent Lamp Bottom and Accent Light Top control (both offline in the Tuya account at test time)",
+    "Accent Lamp Bottom and Accent Light Top control (both bulbs were unpowered at test time because their wall switch was off, so they were absent from the Tuya cloud; they were still discovered and correctly shown as offline)",
     "Tuya scenes (the project has no scene subscription; the scene list is empty)",
     "cold-start-from-killed scan latency (functional, not timed)",
     "App Link autoVerify (needs assetlinks.json on taprelay.app)"

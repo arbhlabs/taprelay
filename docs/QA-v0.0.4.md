@@ -81,8 +81,11 @@ of the `40000904 param size too much` page-size rejection.
 
 ## Not verified
 
-- Control of **Accent Lamp Bottom** and **Accent Light Top** — both were offline in the Tuya
-  account for the whole session, so no command could be confirmed at the bulb.
+- Control of **Accent Lamp Bottom** and **Accent Light Top** — both bulbs sit on a wall switch
+  that was off, so they were unpowered and absent from the Tuya cloud for the whole session. This
+  is expected behaviour, not a defect: an unpowered bulb has no cloud connection. Both were still
+  discovered correctly, listed under their account names, and correctly shown as offline. Sending
+  a command to either would need the wall switch on.
 - Tuya **scenes** — the project has no scene subscription, so the scene list is empty.
 - Cold-start-from-killed scan latency (functional, not timed).
 - App Link `autoVerify` (needs `assetlinks.json` on taprelay.app).
