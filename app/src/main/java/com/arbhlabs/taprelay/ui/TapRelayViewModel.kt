@@ -388,6 +388,33 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancelWizard() { _wizard.value = WizardState() }
 
+    fun stepBack() {
+        val w = _wizard.value
+        if (!w.active) return
+        when (w.step) {
+            WizardStep.SCAN, WizardStep.DONE -> cancelWizard()
+            WizardStep.PICK_DEVICE -> {
+                if (w.editingExisting) cancelWizard()
+                else _wizard.value = w.copy(step = WizardStep.SCAN, scanPhase = ScanPhase.READY)
+            }
+            WizardStep.PICK_ACTION -> {
+                _wizard.value = w.copy(step = WizardStep.PICK_DEVICE)
+            }
+            WizardStep.TUNE -> {
+                _wizard.value = w.copy(step = WizardStep.PICK_ACTION)
+            }
+            WizardStep.NAME -> {
+                if (w.targetType == TargetType.SCENE) {
+                    _wizard.value = w.copy(step = WizardStep.PICK_DEVICE)
+                } else if (w.wantsColor || w.wantsBrightness) {
+                    _wizard.value = w.copy(step = WizardStep.TUNE)
+                } else {
+                    _wizard.value = w.copy(step = WizardStep.PICK_ACTION)
+                }
+            }
+        }
+    }
+
     // ---- SCAN step transitions (driven by the Activity's NFC callback) ----
 
     fun onTagDetected() {

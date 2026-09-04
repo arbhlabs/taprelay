@@ -1,5 +1,6 @@
 package com.arbhlabs.taprelay.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -108,37 +109,49 @@ fun TapRelayApp(vm: TapRelayViewModel) {
             !ui.onboardingComplete && !startedOnboarding ->
                 OnboardingScreen(onGetStarted = { startedOnboarding = true })
 
-            !ui.onboardingComplete ->
+            !ui.onboardingComplete -> {
+                if (startedOnboarding) {
+                    BackHandler { startedOnboarding = false }
+                }
                 ConnectionsScreen(
                     vm = vm,
                     isOnboarding = true,
                     onDone = { vm.completeOnboarding() }
                 )
+            }
 
-            showConnections ->
+            showConnections -> {
+                BackHandler { showConnections = false }
                 ConnectionsScreen(
                     vm = vm,
                     isOnboarding = false,
                     onDone = { showConnections = false }
                 )
+            }
 
-            showControllers ->
+            showControllers -> {
+                BackHandler { showControllers = false }
                 ControllersScreen(
                     vm = vm,
                     onDone = { showControllers = false }
                 )
+            }
 
-            showLastDose ->
+            showLastDose -> {
+                BackHandler { showLastDose = false }
                 LastDoseScreen(
                     vm = vm,
                     onDone = { showLastDose = false }
                 )
+            }
 
-            showPlaces ->
+            showPlaces -> {
+                BackHandler { showPlaces = false }
                 PlacesScreen(
                     vm = vm,
                     onDone = { showPlaces = false }
                 )
+            }
 
             else ->
                 HomeScreen(
@@ -162,6 +175,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
         }
 
         if (wizard.active) {
+            BackHandler { vm.stepBack() }
             Surface(Modifier.fillMaxSize()) {
                 AddTagFlow(
                     vm = vm,
@@ -180,6 +194,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
 
         // A trigger set to Open item lands straight on that item.
         openItemId?.let { id ->
+            BackHandler { vm.closeItem() }
             val target = ui.tags.firstOrNull { it.tagId == id }
             if (target == null) {
                 LaunchedEffect(id) { vm.closeItem() }
@@ -198,6 +213,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
         }
 
         setupPrompt?.let { id ->
+            BackHandler { vm.dismissSetupPrompt() }
             AlertDialog(
                 onDismissRequest = { vm.dismissSetupPrompt() },
                 title = { Text("New tag") },
@@ -208,6 +224,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
         }
 
         if (showProDialog) {
+            BackHandler { showProDialog = false }
             ProUpgradeDialog(
                 isPro = ui.isPro,
                 isTrialActive = ui.isTrialActive,
@@ -220,6 +237,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
         }
 
         if (showDiagnostics) {
+            BackHandler { showDiagnostics = false }
             DiagnosticsSheet(
                 vm = vm,
                 onDismiss = { showDiagnostics = false }
@@ -227,6 +245,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
         }
 
         if (showNfcStore) {
+            BackHandler { showNfcStore = false }
             NfcStoreDialog(
                 isPro = ui.isPro,
                 onDismiss = { showNfcStore = false }
@@ -883,8 +902,8 @@ private fun AddTagFlow(
         TopAppBar(
             title = { Text(if (w.editingExisting) "Change mapping" else "Add tag") },
             navigationIcon = {
-                IconButton(onClick = { vm.cancelWizard() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close")
+                IconButton(onClick = { vm.stepBack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                 }
             }
         )

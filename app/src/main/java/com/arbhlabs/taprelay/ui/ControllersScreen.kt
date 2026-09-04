@@ -1,5 +1,6 @@
 package com.arbhlabs.taprelay.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -62,6 +63,19 @@ fun ControllersScreen(
     // null means: do whatever the item itself is set to.
     var selectedActivation by remember { mutableStateOf<ActivationMode?>(null) }
     var editingMapping by remember { mutableStateOf<ControllerMappingEntity?>(null) }
+
+    BackHandler {
+        if (showAssignDialog) {
+            if (mappingStep == 2 && editingMapping == null) {
+                mappingStep = 1
+            } else {
+                showAssignDialog = false
+                vm.stopControllerLearning()
+            }
+        } else {
+            onDone()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -554,14 +568,14 @@ fun ControllersScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            "Choose which smart home action should trigger when you press ${capturedInput?.label}:",
+                            "Choose which action or LastDose log should trigger when you press ${capturedInput?.label}:",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         if (ui.tags.isEmpty()) {
                             Text(
-                                "No TapRelay actions configured yet. Please configure at least one smart home device or tag first.",
+                                "No actions or LastDose logs configured yet. Please configure at least one smart home device or LastDose log first.",
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall
                             )

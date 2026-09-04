@@ -1,5 +1,6 @@
 package com.arbhlabs.taprelay.ui.lastdose
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -67,6 +68,19 @@ fun LastDoseScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
     var editing by remember { mutableStateOf<TagEntity?>(null) }
     var showEditor by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<TagEntity?>(null) }
+
+    BackHandler {
+        when {
+            showEditor -> {
+                showEditor = false
+                editing = null
+            }
+            confirmDelete != null -> {
+                confirmDelete = null
+            }
+            else -> onDone()
+        }
+    }
 
     LaunchedEffect(Unit) { vm.refreshLastDose() }
 
