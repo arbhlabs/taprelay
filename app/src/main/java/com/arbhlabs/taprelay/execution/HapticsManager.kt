@@ -15,8 +15,12 @@ class HapticsManager(context: Context) {
         context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     }
 
+    /** Set from preferences; the OS haptics setting still has the final say. */
+    @Volatile
+    var enabled: Boolean = true
+
     private fun play(effect: Int) {
-        if (!vibrator.hasVibrator()) return
+        if (!enabled || !vibrator.hasVibrator()) return
         runCatching { vibrator.vibrate(VibrationEffect.createPredefined(effect)) }
     }
 

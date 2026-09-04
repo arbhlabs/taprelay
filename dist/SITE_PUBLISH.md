@@ -3,7 +3,31 @@
 TapRelay is published as a **private alpha** on arbhlabs.com through the standard ARBH Labs
 release pipeline. The disclaimer copy below is required on the download page and is live there.
 
-## Current release — v0.1.0 (2026-09-04)
+## Current release — v0.1.2 (2026-09-04)
+
+- `TapRelay-v0.1.2.apk` — signed release, SHA-256
+  `4c3ac382f5ac4d55f8230f6ae24f3d6372a20cf59be994f2bbc58b9bc7a00021`, 7,715,111 bytes,
+  versionCode 13, DB schema 9
+- `TapRelay-v0.1.2.apk.sha256`, `../docs/QA-v0.1.2.md`
+- Activation modes (Execute / Open item / Quick Controls) on every item and every trigger;
+  capability-driven Quick Controls; Remote Mode always-on face with a Quick Settings tile;
+  Places (geofenced routines); controller rumble and preferences. Fixes controller-button
+  assignment (dialog window stole gamepad focus) and Sensibo fan levels that the unit does not have.
+
+Live URLs (all serve the exact bytes above, verified by download):
+- https://arbhlabs.com/taprelay/
+- https://arbhlabs.com/downloads/TapRelay-0.1.2.apk
+- https://arbhlabs.com/downloads/TapRelay.apk
+- https://arbhlabs.com/downloads/TapRelay-latest.apk
+
+R2 objects in `arbh-releases`:
+- `taprelay/releases/0.1.2/TapRelay-0.1.2.apk` (immutable)
+- `taprelay/latest/TapRelay.apk`, `taprelay/latest/TapRelay-latest.apk` (aliases)
+
+> 0.1.1 (vc12) was published before this work landed, so these changes shipped as 0.1.2 rather
+> than overwriting bytes someone may already have downloaded.
+
+## Previous release — v0.1.0 (2026-09-04)
 
 - `TapRelay-v0.1.0.apk` — signed release, SHA-256
   `812e5ef5a421eee92bd282503f2aeb5f9772ef8830fc0b9cdbdbae0006c92837`, 6,839,178 bytes,

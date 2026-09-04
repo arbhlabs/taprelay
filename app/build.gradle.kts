@@ -23,8 +23,8 @@ android {
         applicationId = "com.arbhlabs.taprelay"
         minSdk = 30
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.1.1"
+        versionCode = 13
+        versionName = "0.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
@@ -101,6 +101,10 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
+    // Geofencing: Play Services is the only API that keeps place triggers alive across
+    // reboots and Doze without TapRelay running.
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("com.google.crypto.tink:tink-android:1.14.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 

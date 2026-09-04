@@ -285,7 +285,8 @@ class TuyaProvider(
         action: ActionType,
         targetState: Int,
         brightnessPercent: Int?,
-        colorRgb: Int?
+        colorRgb: Int?,
+        fanLevel: String?
     ) {
         if (targetType == TargetType.SCENE || action == ActionType.RUN_SCENE) {
             val creds = credentials()

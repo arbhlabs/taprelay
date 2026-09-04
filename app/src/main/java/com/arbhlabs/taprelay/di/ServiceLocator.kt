@@ -20,6 +20,7 @@ import com.arbhlabs.taprelay.domain.repository.TagRepository
 import com.arbhlabs.taprelay.execution.ActionExecutor
 import com.arbhlabs.taprelay.execution.HapticsManager
 import com.arbhlabs.taprelay.monetization.EntitlementRepository
+import com.arbhlabs.taprelay.trigger.TriggerRouter
 
 /** Manual dependency container. Single instance, created in [com.arbhlabs.taprelay.TapRelayApplication]. */
 class ServiceLocator(context: Context) {
@@ -32,7 +33,11 @@ class ServiceLocator(context: Context) {
         AppDatabase.MIGRATION_1_2,
         AppDatabase.MIGRATION_2_3,
         AppDatabase.MIGRATION_3_4,
-        AppDatabase.MIGRATION_4_5
+        AppDatabase.MIGRATION_4_5,
+        AppDatabase.MIGRATION_5_6,
+        AppDatabase.MIGRATION_6_7,
+        AppDatabase.MIGRATION_7_8,
+        AppDatabase.MIGRATION_8_9
     )
      // No destructive fallback: a missing migration must fail loudly rather than
      // silently deleting every tag mapping the owner has set up.
@@ -71,5 +76,26 @@ class ServiceLocator(context: Context) {
         haptics = haptics,
         tapLogDao = tapLogDao,
         entitlements = entitlementRepository
+    )
+
+    /** trigger -> item -> activation mode -> execute / open item / Quick Controls. */
+    val triggerRouter = TriggerRouter(
+        tags = tagRepository,
+        executor = actionExecutor
+    )
+
+    val controllerMappingDao = database.controllerMappingDao()
+    val placeTriggerDao = database.placeTriggerDao()
+
+    val geofenceManager = com.arbhlabs.taprelay.location.GeofenceManager(
+        context = appContext,
+        dao = placeTriggerDao
+    )
+
+    val controllerManager = com.arbhlabs.taprelay.controller.ControllerManager(
+        context = appContext,
+        mappingDao = controllerMappingDao,
+        triggerRouter = triggerRouter,
+        haptics = haptics
     )
 }

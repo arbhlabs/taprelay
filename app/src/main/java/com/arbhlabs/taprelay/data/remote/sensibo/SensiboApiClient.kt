@@ -46,7 +46,7 @@ class SensiboApiClient(engine: HttpClientEngine? = null) {
     }
 
     suspend fun getPods(apiKey: String): List<SensiboPodDto> = wrap {
-        val res = client.get("$BASE/users/me/pods?fields=id,room,productModel,acState,connectionStatus&apiKey=$apiKey") {
+        val res = client.get("$BASE/users/me/pods?fields=id,room,productModel,acState,connectionStatus,remoteCapabilities&apiKey=$apiKey") {
             contentType(ContentType.Application.Json)
         }
         check(res)
@@ -68,6 +68,29 @@ class SensiboApiClient(engine: HttpClientEngine? = null) {
         if (acState.on) 1 else 0
     }
 
+    /** Returns one pod with its live state and the capabilities it reports. */
+    suspend fun getPod(apiKey: String, podId: String): SensiboPodDto = wrap {
+        val res = client.get("$BASE/pods/$podId?fields=id,room,productModel,acState,connectionStatus,remoteCapabilities&apiKey=$apiKey") {
+            contentType(ContentType.Application.Json)
+        }
+        check(res)
+        val body = res.body<SensiboPodResponse>()
+        if (body.status != "success" || body.result == null) throw TapException(TapError.SERVER)
+        body.result
+    }
+
+    /** Returns the full acState or null. */
+    suspend fun getAcState(apiKey: String, podId: String): SensiboAcStateDto? = wrap {
+        val res = client.get("$BASE/pods/$podId?fields=acState,connectionStatus&apiKey=$apiKey") {
+            contentType(ContentType.Application.Json)
+        }
+        check(res)
+        val body = res.body<SensiboPodResponse>()
+        if (body.status != "success" || body.result == null) throw TapException(TapError.SERVER)
+        if (!body.result.isOnline) throw TapException(TapError.DEVICE_OFFLINE)
+        body.result.acState
+    }
+
     suspend fun setPower(apiKey: String, podId: String, on: Boolean) = wrap {
         val res = client.post("$BASE/pods/$podId/acStates?apiKey=$apiKey") {
             contentType(ContentType.Application.Json)
@@ -86,6 +109,41 @@ class SensiboApiClient(engine: HttpClientEngine? = null) {
         check(res)
         val body = res.body<SensiboAcStateResponse>()
         if (body.status != "success") throw TapException(TapError.SERVER)
+    }
+
+    suspend fun setMode(apiKey: String, podId: String, mode: String) = wrap {
+        val res = client.post("$BASE/pods/$podId/acStates?apiKey=$apiKey") {
+            contentType(ContentType.Application.Json)
+            setBody(SensiboAcStateSetRequest(SensiboAcStatePayload(on = true, mode = mode)))
+        }
+        check(res)
+        val body = res.body<SensiboAcStateResponse>()
+        if (body.status != "success") throw TapException(TapError.SERVER)
+    }
+
+    /**
+     * Toggles between the slowest and fastest fan level the unit actually reports, in one tap.
+     * Sitting at the top end drops to the bottom one; anything else goes to the top.
+     * Always turns the unit on. Returns the level it settled on.
+     */
+    suspend fun toggleFanSpeed(apiKey: String, podId: String): String = wrap {
+        val pod = getPod(apiKey, podId)
+        val currentMode = pod.acState?.mode?.lowercase()
+        val modes = pod.remoteCapabilities?.modes.orEmpty()
+        val reported = (
+            modes[currentMode]?.fanLevels
+                ?: modes["fan"]?.fanLevels
+                ?: modes.values.firstOrNull()?.fanLevels
+                ?: emptyList()
+            ).filter { !it.equals("auto", ignoreCase = true) }
+
+        // Fall back to the classic pair only when the unit tells us nothing about itself.
+        val slowest = reported.firstOrNull() ?: "low"
+        val fastest = reported.lastOrNull() ?: "high"
+        val currentLevel = pod.acState?.fanLevel?.lowercase()
+        val newLevel = if (currentLevel == fastest.lowercase()) slowest else fastest
+        setFanLevel(apiKey, podId, newLevel)
+        newLevel
     }
 
     private suspend fun check(res: HttpResponse) {

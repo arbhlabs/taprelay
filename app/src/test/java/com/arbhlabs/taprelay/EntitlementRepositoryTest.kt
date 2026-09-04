@@ -50,6 +50,17 @@ class EntitlementRepositoryTest {
     }
 
     @Test
+    fun aarons_admin_pin_unlocks_pro_immediately() = runTest {
+        val repo = EntitlementRepository()
+        val result = repo.activateLicense("96275562199744435376961556288749")
+
+        assertTrue(result.isSuccess)
+        assertTrue(repo.isPro.value)
+        assertEquals("admin", repo.proLicense.value?.tier)
+        assertTrue(repo.canAccess(TapRelayProFeature.MULTI_DEVICE_ROUTINES))
+    }
+
+    @Test
     fun blank_license_returns_failure() = runTest {
         val repo = EntitlementRepository()
         val result = repo.activateLicense("   ")

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TapRelay</string>
+    <string name="remote_mode_tile">TapRelay Remote</string>
 </resources>

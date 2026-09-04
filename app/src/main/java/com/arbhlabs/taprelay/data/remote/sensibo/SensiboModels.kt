@@ -26,7 +26,8 @@ data class SensiboPodDto(
     val room: SensiboRoomDto? = null,
     val productModel: String = "",
     val acState: SensiboAcStateDto? = null,
-    val connectionStatus: SensiboConnectionStatusDto? = null
+    val connectionStatus: SensiboConnectionStatusDto? = null,
+    val remoteCapabilities: SensiboRemoteCapabilitiesDto? = null
 ) {
     val isOnline: Boolean
         get() = connectionStatus?.isAlive ?: true
@@ -73,5 +74,22 @@ data class SensiboAcStateSetRequest(
 @Serializable
 data class SensiboAcStatePayload(
     val on: Boolean,
-    val fanLevel: String? = null
+    val fanLevel: String? = null,
+    val mode: String? = null
+)
+
+/**
+ * What the unit itself reports it can do, keyed by operating mode. A Pure air purifier
+ * reports a single "fan" mode; an AC controller reports cool/heat/fan/dry/auto, each with
+ * its own fan levels. TapRelay never offers a level or mode that is missing from here.
+ */
+@Serializable
+data class SensiboRemoteCapabilitiesDto(
+    val modes: Map<String, SensiboModeCapabilityDto> = emptyMap()
+)
+
+@Serializable
+data class SensiboModeCapabilityDto(
+    val fanLevels: List<String> = emptyList(),
+    val swing: List<String> = emptyList()
 )

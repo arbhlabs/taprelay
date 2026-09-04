@@ -30,10 +30,12 @@ import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Nfc
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.*
@@ -54,8 +56,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.ActivationMode
 import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.ColorMath
+import com.arbhlabs.taprelay.domain.model.DeviceLabels
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
 import com.arbhlabs.taprelay.domain.model.LightPresets
@@ -64,6 +68,8 @@ import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.SENSIBO_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
+import com.arbhlabs.taprelay.ui.places.PlacesScreen
+import com.arbhlabs.taprelay.ui.quick.QuickControlsSheet
 import kotlin.math.roundToInt
 
 val ICONS: Map<String, ImageVector> = mapOf(
@@ -84,12 +90,15 @@ fun TapRelayApp(vm: TapRelayViewModel) {
     val wizard by vm.wizard.collectAsState()
     val setupPrompt by vm.setupPrompt.collectAsState()
     val nfcReady by vm.nfcReady.collectAsState()
+    val openItemId by vm.openItemTagId.collectAsState()
 
     var startedOnboarding by rememberSaveable { mutableStateOf(false) }
     var showConnections by rememberSaveable { mutableStateOf(false) }
     var showProDialog by rememberSaveable { mutableStateOf(false) }
     var showDiagnostics by rememberSaveable { mutableStateOf(false) }
     var showNfcStore by rememberSaveable { mutableStateOf(false) }
+    var showControllers by rememberSaveable { mutableStateOf(false) }
+    var showPlaces by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -110,6 +119,18 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     onDone = { showConnections = false }
                 )
 
+            showControllers ->
+                ControllersScreen(
+                    vm = vm,
+                    onDone = { showControllers = false }
+                )
+
+            showPlaces ->
+                PlacesScreen(
+                    vm = vm,
+                    onDone = { showPlaces = false }
+                )
+
             else ->
                 HomeScreen(
                     vm = vm,
@@ -120,6 +141,8 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     isPro = ui.isPro,
                     nfcReady = nfcReady,
                     onOpenConnections = { showConnections = true },
+                    onOpenControllers = { showControllers = true },
+                    onOpenPlaces = { showPlaces = true },
                     onOpenPro = { showProDialog = true },
                     onOpenDiagnostics = { showDiagnostics = true },
                     onOpenNfcStore = { showNfcStore = true }
@@ -139,6 +162,28 @@ fun TapRelayApp(vm: TapRelayViewModel) {
         }
 
         TapRelayPill(feedback = pill, onDismiss = { vm.clearPill() }, modifier = Modifier.align(Alignment.TopCenter))
+
+        // A trigger set to Quick Controls opens this in place instead of firing.
+        QuickControlsSheet(session = vm.quickControls, onDismiss = { vm.closeQuickControls() })
+
+        // A trigger set to Open item lands straight on that item.
+        openItemId?.let { id ->
+            val target = ui.tags.firstOrNull { it.tagId == id }
+            if (target == null) {
+                LaunchedEffect(id) { vm.closeItem() }
+            } else {
+                TagDetailSheet(
+                    tag = target,
+                    onDismiss = { vm.closeItem() },
+                    onRename = { vm.renameTag(target, it) },
+                    onToggleEnabled = { vm.setTagEnabled(target, it) },
+                    onChangeMapping = { vm.editTag(target); vm.closeItem() },
+                    onTest = { vm.testTag(target) },
+                    onQuickControls = { vm.closeItem(); vm.openQuickControls(target.tagId) },
+                    onDelete = { vm.deleteTag(target); vm.closeItem() }
+                )
+            }
+        }
 
         setupPrompt?.let { id ->
             AlertDialog(
@@ -505,6 +550,8 @@ private fun HomeScreen(
     isPro: Boolean,
     nfcReady: Boolean,
     onOpenConnections: () -> Unit,
+    onOpenControllers: () -> Unit,
+    onOpenPlaces: () -> Unit,
     onOpenPro: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenNfcStore: () -> Unit
@@ -514,6 +561,8 @@ private fun HomeScreen(
     var showAbout by remember { mutableStateOf(false) }
 
     val anyConnected = goveeConnected || tuyaConnected || sensiboConnected
+    val controllers by vm.connectedControllers.collectAsState()
+    val controllerMappings by vm.controllerMappings.collectAsState()
 
     Scaffold(
         topBar = {
@@ -565,6 +614,16 @@ private fun HomeScreen(
                         Icon(Icons.Default.MoreVert, "More")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Controllers & Remotes") },
+                            leadingIcon = { Icon(Icons.Default.SportsEsports, null, tint = MaterialTheme.colorScheme.primary) },
+                            onClick = { menuOpen = false; onOpenControllers() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Places & Routines") },
+                            leadingIcon = { Icon(Icons.Default.Place, null, tint = MaterialTheme.colorScheme.primary) },
+                            onClick = { menuOpen = false; onOpenPlaces() }
+                        )
                         DropdownMenuItem(
                             text = { Text("TapRelay Pro") },
                             leadingIcon = { Icon(Icons.Default.Star, null, tint = MaterialTheme.colorScheme.primary) },
@@ -627,6 +686,47 @@ private fun HomeScreen(
             }
         } else {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                if (controllers.isNotEmpty() || controllerMappings.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenControllers)
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.SportsEsports,
+                                contentDescription = null,
+                                tint = if (controllers.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = if (controllers.isNotEmpty()) "${controllers.first().name} connected" else "Game Controller Remotes",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (controllerMappings.isNotEmpty()) "${controllerMappings.size} button mappings active" else "Tap to map buttons",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -703,6 +803,7 @@ private fun HomeScreen(
             onToggleEnabled = { vm.setTagEnabled(tag, it) },
             onChangeMapping = { vm.editTag(tag); detail = null },
             onTest = { vm.testTag(tag) },
+            onQuickControls = { detail = null; vm.openQuickControls(tag.tagId) },
             onDelete = { vm.deleteTag(tag); detail = null }
         )
     }
@@ -717,13 +818,20 @@ private fun TagDetailSheet(
     onToggleEnabled: (Boolean) -> Unit,
     onChangeMapping: () -> Unit,
     onTest: () -> Unit,
+    onQuickControls: () -> Unit,
     onDelete: () -> Unit
 ) {
     var name by remember(tag.tagId) { mutableStateOf(tag.friendlyName) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             Text("Edit tag", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(
                 value = name,
@@ -738,11 +846,17 @@ private fun TagDetailSheet(
                 Switch(checked = tag.enabled, onCheckedChange = onToggleEnabled)
             }
             Text(
-                "Currently ${tagActionSummary(tag).lowercase()} on ${tag.allTargets.joinToString { it.name.ifBlank { "a light" } }}. " +
+                "Currently ${tagActionSummary(tag).lowercase()} on ${tag.allTargets.joinToString { it.name.ifBlank { if (tag.providerId == SENSIBO_PROVIDER_ID) "a device" else "a light" } }}. " +
                     "Changing the device, scene, or action does not require re-tapping the sticker.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Text(
+                "When triggered: ${tag.activation.label.lowercase()}.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FilledTonalButton(onClick = onQuickControls, Modifier.fillMaxWidth()) { Text("Open Quick Controls") }
             OutlinedButton(onClick = onChangeMapping, Modifier.fillMaxWidth()) { Text("Change device, scene, or action") }
             OutlinedButton(onClick = onTest, Modifier.fillMaxWidth()) { Text("Test action") }
             if (!confirmDelete) {
@@ -931,56 +1045,147 @@ private fun AddTagFlow(
 
                 WizardStep.PICK_ACTION -> {
                     val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
+                    val isClimateOrFan = picked.isNotEmpty() && picked.all { it.providerId == SENSIBO_PROVIDER_ID }
                     val colorCount = picked.count { it.supportsColor }
                     val brightCount = picked.count { it.supportsBrightness }
 
-                    Text("What should the power do?", style = MaterialTheme.typography.titleMedium)
-                    listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF).forEach { a ->
-                        val chosen = w.action.powerIntent() == a
-                        ElevatedCard(
-                            onClick = { vm.selectAction(a) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                Modifier.padding(16.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    actionLabel(a),
-                                    Modifier.weight(1f),
-                                    style = MaterialTheme.typography.titleMedium
+                    if (isClimateOrFan) {
+                        Text("What should this tag do?", style = MaterialTheme.typography.titleMedium)
+                        // Only the speeds this unit reports; a single-speed unit gets no fan options.
+                        val fanLevels = w.fanLevels.filterNot { it.equals("auto", true) }
+                        val slowest = fanLevels.firstOrNull()?.let { DeviceLabels.fanLevel(it) }
+                        val fastest = fanLevels.lastOrNull()?.let { DeviceLabels.fanLevel(it) }
+                        val climateActions = buildList {
+                            add(Triple(ActionType.TOGGLE, "Toggle Power", "Turns power on or off with each tap"))
+                            if (fanLevels.size >= 2) {
+                                add(
+                                    Triple(
+                                        ActionType.TOGGLE_FAN_SPEED,
+                                        "Toggle Fan Speed ($slowest ↔ $fastest)",
+                                        "Flips between $slowest and $fastest on each tap"
+                                    )
                                 )
-                                RadioButton(selected = chosen, onClick = { vm.selectAction(a) })
+                            }
+                            add(Triple(ActionType.TURN_ON, "Turn On", "Always turns the unit on"))
+                            add(Triple(ActionType.TURN_OFF, "Turn Off", "Always turns the unit off"))
+                        }
+                        if (w.readingCapabilities) {
+                            Text(
+                                "Reading what this unit can do…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else if (w.fanLevels.isEmpty()) {
+                            Text(
+                                "Couldn't read this unit's fan speeds, so only power actions are offered.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        climateActions.forEach { (a, title, desc) ->
+                            val chosen = w.action == a
+                            ElevatedCard(
+                                onClick = { vm.selectAction(a) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.padding(16.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    RadioButton(selected = chosen, onClick = { vm.selectAction(a) })
+                                }
                             }
                         }
-                    }
 
-                    // Colour and brightness are extras on top of the power action, not
-                    // alternatives to it, so a tag can toggle a light *and* give it a look.
-                    val turnsOff = w.action.powerIntent() == ActionType.TURN_OFF
-                    if (!turnsOff && (colorCount > 0 || brightCount > 0)) {
-                        Text(
-                            "And when it comes on…",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        if (colorCount > 0) {
-                            ExtraToggleRow(
-                                label = "Also set a colour",
-                                hint = if (colorCount < picked.size)
-                                    "$colorCount of ${picked.size} of your lights can do this" else null,
-                                checked = w.wantsColor,
-                                onCheckedChange = { vm.setWantsColor(it) }
+                        if (w.fanLevels.isNotEmpty() &&
+                            (w.action == ActionType.TOGGLE || w.action == ActionType.TURN_ON)
+                        ) {
+                            Text(
+                                if (w.action == ActionType.TOGGLE) "And when it turns on…" else "Fan speed setting",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 8.dp)
                             )
+                            ExtraToggleRow(
+                                label = "Set fan speed on activation",
+                                hint = if (w.wantsFanSpeed) "Sets fan to ${DeviceLabels.fanLevel(w.fanLevel)} when active" else "Keep current fan speed",
+                                checked = w.wantsFanSpeed,
+                                onCheckedChange = { vm.setWantsFanSpeed(it) }
+                            )
+                            if (w.wantsFanSpeed) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    w.fanLevels.forEach { lvl ->
+                                        val selected = w.fanLevel.equals(lvl, ignoreCase = true)
+                                        FilterChip(
+                                            selected = selected,
+                                            onClick = { vm.setFanLevel(lvl) },
+                                            label = {
+                                                Text(
+                                                    DeviceLabels.fanLevel(lvl),
+                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        if (brightCount > 0) {
-                            ExtraToggleRow(
-                                label = "Also set a brightness",
-                                hint = if (brightCount < picked.size)
-                                    "$brightCount of ${picked.size} of your lights can do this" else null,
-                                checked = w.wantsBrightness,
-                                onCheckedChange = { vm.setWantsBrightness(it) }
+                    } else {
+                        Text("What should the power do?", style = MaterialTheme.typography.titleMedium)
+                        listOf(ActionType.TOGGLE, ActionType.TURN_ON, ActionType.TURN_OFF).forEach { a ->
+                            val chosen = w.action.powerIntent() == a
+                            ElevatedCard(
+                                onClick = { vm.selectAction(a) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.padding(16.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        actionLabel(a),
+                                        Modifier.weight(1f),
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    RadioButton(selected = chosen, onClick = { vm.selectAction(a) })
+                                }
+                            }
+                        }
+
+                        // Colour and brightness are extras on top of the power action, not
+                        // alternatives to it, so a tag can toggle a light *and* give it a look.
+                        val turnsOff = w.action.powerIntent() == ActionType.TURN_OFF
+                        if (!turnsOff && (colorCount > 0 || brightCount > 0)) {
+                            Text(
+                                "And when it comes on…",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(top = 8.dp)
                             )
+                            if (colorCount > 0) {
+                                ExtraToggleRow(
+                                    label = "Also set a colour",
+                                    hint = if (colorCount < picked.size)
+                                        "$colorCount of ${picked.size} of your lights can do this" else null,
+                                    checked = w.wantsColor,
+                                    onCheckedChange = { vm.setWantsColor(it) }
+                                )
+                            }
+                            if (brightCount > 0) {
+                                ExtraToggleRow(
+                                    label = "Also set a brightness",
+                                    hint = if (brightCount < picked.size)
+                                        "$brightCount of ${picked.size} of your lights can do this" else null,
+                                    checked = w.wantsBrightness,
+                                    onCheckedChange = { vm.setWantsBrightness(it) }
+                                )
+                            }
                         }
                     }
 
@@ -1173,6 +1378,17 @@ private fun AddTagFlow(
                             )
                         }
                     }
+                    Spacer(Modifier.height(4.dp))
+                    Text("When this is triggered", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Applies to NFC taps, controller buttons, and anything else that fires this item.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    ActivationModePicker(
+                        selected = w.activationMode,
+                        onSelect = { vm.setActivationMode(it) }
+                    )
                     Button(
                         onClick = { vm.saveTag() },
                         enabled = !w.busy,
@@ -1186,6 +1402,76 @@ private fun AddTagFlow(
                     Text("Tap the sticker now to test it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Button(onClick = { vm.cancelWizard() }, Modifier.fillMaxWidth()) { Text("Done") }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The activation-mode choice, shared by the tag wizard and the controller mapping dialog so a
+ * trigger and an item are configured the same way.
+ */
+@Composable
+fun ActivationModePicker(
+    selected: ActivationMode?,
+    onSelect: (ActivationMode) -> Unit,
+    modifier: Modifier = Modifier,
+    inheritLabel: String? = null,
+    onInherit: (() -> Unit)? = null
+) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (inheritLabel != null && onInherit != null) {
+            ActivationModeRow(
+                title = inheritLabel,
+                description = "Follow whatever this item is set to.",
+                selected = selected == null,
+                onClick = onInherit
+            )
+        }
+        ActivationMode.entries.forEach { mode ->
+            ActivationModeRow(
+                title = mode.label,
+                description = mode.description,
+                selected = selected == mode,
+                onClick = { onSelect(mode) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActivationModeRow(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Spacer(Modifier.width(6.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -1346,10 +1632,15 @@ private fun NfcPulse() {
     }
 }
 
-/** What a saved tag does, including the brightness or colour it was given. */
+/** What a saved tag does, including fan speed, brightness or colour it was given. */
 private fun tagActionSummary(tag: TagEntity): String {
+    if (tag.actionType == ActionType.TOGGLE_FAN_SPEED) {
+        val count = tag.allTargets.size
+        return if (count > 1) "Fan Low ↔ High • $count devices" else "Fan Low ↔ High"
+    }
     val parts = buildList {
         add(actionLabel(tag.actionType.powerIntent()))
+        tag.fanLevel?.let { add("Fan " + DeviceLabels.fanLevel(it)) }
         tag.colorRgb?.let { add(LightPresets.nameFor(it)) }
         tag.brightnessPercent?.let { add("${Brightness.clampPercent(it)}%") }
         if (tag.timeConditionEnabled && tag.startHour != null && tag.endHour != null) {
@@ -1403,6 +1694,7 @@ private fun actionLabel(a: ActionType) = when (a) {
     ActionType.SET_COLOR -> "Set Colour"
     ActionType.SET_SCENE -> "Set Colour + Brightness"
     ActionType.RUN_SCENE -> "Run Scene"
+    ActionType.TOGGLE_FAN_SPEED -> "Fan Low ↔ High"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

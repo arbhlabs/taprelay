@@ -7,6 +7,13 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Places. Background location is what lets a geofence fire while TapRelay is closed;
+         it is requested separately and only after the owner has added a place. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <uses-feature
         android:name="android.hardware.nfc"
         android:required="true" />
@@ -35,6 +42,38 @@
             </intent-filter>
         </activity>
 
+        <!--
+            Remote Mode. Shows over the lock screen and wakes the display so the phone can sit
+            docked and be driven by a game controller. Android delivers controller input only to
+            the focused window, so this is a normal foreground activity - no overlay permission
+            and no accessibility service.
+        -->
+        <activity
+            android:name=".ui.remote.RemoteModeActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.TapRelay" />
+
+        <service
+            android:name=".ui.remote.RemoteModeTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_qs_remote"
+            android:label="@string/remote_mode_tile"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name=".ui.quick.QuickControlsActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.TapRelay.Transparent" />
+
         <activity
             android:name=".ui.NfcTrampolineActivity"
             android:exported="true"
@@ -62,6 +101,21 @@
                     android:pathPrefix="/t/" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".location.GeofenceReceiver"
+            android:exported="false" />
+
+        <!-- Android drops every geofence on reboot, so they are rebuilt from the database. -->
+        <receiver
+            android:name=".location.BootReceiver"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

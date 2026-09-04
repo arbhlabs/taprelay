@@ -113,4 +113,76 @@ class SensiboProviderTest {
         provider.setBrightness("pod_pure_1", "pure", 90)
         assertTrue(lastBody.contains("high"))
     }
+
+    @Test
+    fun toggle_fan_speed_from_low_flips_to_high() = runTest {
+        val acStateLow = """
+            {
+              "status": "success",
+              "result": {
+                "id": "pod_pure_1",
+                "acState": { "on": true, "fanLevel": "low" },
+                "connectionStatus": { "isAlive": true }
+              }
+            }
+        """.trimIndent()
+
+        var postBody = ""
+        val engine = MockEngine { req ->
+            if (req.method.value == "GET") {
+                respond(acStateLow, HttpStatusCode.OK, jsonHeaders)
+            } else {
+                postBody = bodyOf(req)
+                respond(setPropertyJson, HttpStatusCode.OK, jsonHeaders)
+            }
+        }
+        val provider = SensiboProvider(SensiboApiClient(engine), inMemoryKey = "valid_key")
+        val newLevel = provider.toggleFanSpeed("pod_pure_1")
+
+        assertEquals("high", newLevel)
+        assertTrue(postBody.contains("high"))
+    }
+
+    @Test
+    fun toggle_fan_speed_from_high_flips_to_low() = runTest {
+        val acStateHigh = """
+            {
+              "status": "success",
+              "result": {
+                "id": "pod_pure_1",
+                "acState": { "on": true, "fanLevel": "high" },
+                "connectionStatus": { "isAlive": true }
+              }
+            }
+        """.trimIndent()
+
+        var postBody = ""
+        val engine = MockEngine { req ->
+            if (req.method.value == "GET") {
+                respond(acStateHigh, HttpStatusCode.OK, jsonHeaders)
+            } else {
+                postBody = bodyOf(req)
+                respond(setPropertyJson, HttpStatusCode.OK, jsonHeaders)
+            }
+        }
+        val provider = SensiboProvider(SensiboApiClient(engine), inMemoryKey = "valid_key")
+        val newLevel = provider.toggleFanSpeed("pod_pure_1")
+
+        assertEquals("low", newLevel)
+        assertTrue(postBody.contains("low"))
+    }
+
+    @Test
+    fun applyToDevice_with_fanLevel_sets_fan_and_power() = runTest {
+        var postBody = ""
+        val engine = MockEngine { req ->
+            postBody = bodyOf(req)
+            respond(setPropertyJson, HttpStatusCode.OK, jsonHeaders)
+        }
+        val provider = SensiboProvider(SensiboApiClient(engine), inMemoryKey = "valid_key")
+        provider.applyToDevice("pod_pure_1", "pure", 1, null, null, fanLevel = "high")
+
+        assertTrue(postBody.contains("\"on\":true"))
+        assertTrue(postBody.contains("\"fanLevel\":\"high\""))
+    }
 }

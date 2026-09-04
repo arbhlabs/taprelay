@@ -3,9 +3,14 @@ package com.arbhlabs.taprelay.domain.provider
 import com.arbhlabs.taprelay.data.remote.sensibo.SensiboApiClient
 import com.arbhlabs.taprelay.data.remote.sensibo.SensiboPodDto
 import com.arbhlabs.taprelay.data.secure.SecureKeyStorage
+import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.DeviceCapabilities
+import com.arbhlabs.taprelay.domain.model.DeviceKind
+import com.arbhlabs.taprelay.domain.model.DeviceSnapshot
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.TapException
+import com.arbhlabs.taprelay.domain.model.TargetType
 import kotlinx.coroutines.flow.first
 
 const val SENSIBO_PROVIDER_ID = "sensibo"
@@ -56,6 +61,99 @@ class SensiboProvider(
             else -> "high"
         }
         api.setFanLevel(apiKey, deviceId, fanLevel)
+    }
+
+    suspend fun toggleFanSpeed(deviceId: String): String =
+        api.toggleFanSpeed(key(), deviceId)
+
+    /**
+     * Only the levels and modes the unit itself reports. A Pure air purifier reports a single
+     * "fan" mode, so no mode picker is offered for it; an AC controller reports several.
+     */
+    override suspend fun getCapabilities(deviceId: String, sku: String): DeviceCapabilities {
+        val pod = api.getPod(key(), deviceId)
+        val modes = pod.remoteCapabilities?.modes.orEmpty()
+        val currentMode = pod.acState?.mode?.lowercase()
+        // Fan levels belong to a mode; show the ones for the mode the unit is actually in.
+        val levels = modes[currentMode]?.fanLevels
+            ?: modes["fan"]?.fanLevels
+            ?: modes.values.firstOrNull()?.fanLevels
+            ?: emptyList()
+        return DeviceCapabilities(
+            kind = DeviceKind.CLIMATE,
+            supportsPower = true,
+            supportsBrightness = false,
+            supportsColor = false,
+            supportsColorTemperature = false,
+            fanLevels = levels,
+            modes = modes.keys.toList()
+        )
+    }
+
+    /** Each pod reports its own levels, so they are read one at a time rather than from a list. */
+    override suspend fun getCapabilities(devices: List<Pair<String, String>>): List<DeviceCapabilities> =
+        devices.map { (id, sku) -> getCapabilities(id, sku) }
+
+    override suspend fun getSnapshot(deviceId: String, sku: String): DeviceSnapshot {
+        val state = api.getAcState(key(), deviceId)
+        return DeviceSnapshot(
+            power = state?.let { if (it.on) 1 else 0 },
+            fanLevel = state?.fanLevel,
+            mode = state?.mode
+        )
+    }
+
+    override suspend fun setFanLevel(deviceId: String, sku: String, level: String) =
+        api.setFanLevel(key(), deviceId, level)
+
+    override suspend fun setMode(deviceId: String, sku: String, mode: String) =
+        api.setMode(key(), deviceId, mode)
+
+    suspend fun getAcState(deviceId: String) =
+        api.getAcState(key(), deviceId)
+
+    override suspend fun executeAction(
+        targetId: String,
+        targetType: TargetType,
+        sku: String,
+        action: ActionType,
+        targetState: Int,
+        brightnessPercent: Int?,
+        colorRgb: Int?,
+        fanLevel: String?
+    ) {
+        if (targetType == TargetType.SCENE) return
+        if (action == ActionType.TOGGLE_FAN_SPEED) {
+            toggleFanSpeed(targetId)
+            return
+        }
+        applyToDevice(targetId, sku, targetState, brightnessPercent, colorRgb, fanLevel)
+    }
+
+    override suspend fun applyToDevice(
+        deviceId: String,
+        sku: String,
+        targetState: Int,
+        brightnessPercent: Int?,
+        colorRgb: Int?,
+        fanLevel: String?
+    ) {
+        if (targetState != 1) {
+            setPower(deviceId, sku, on = false)
+            return
+        }
+        val level = fanLevel ?: when {
+            brightnessPercent != null && brightnessPercent <= 25 -> "quiet"
+            brightnessPercent != null && brightnessPercent <= 50 -> "low"
+            brightnessPercent != null && brightnessPercent <= 75 -> "medium"
+            brightnessPercent != null -> "high"
+            else -> null
+        }
+        if (level != null) {
+            api.setFanLevel(key(), deviceId, level)
+        } else {
+            setPower(deviceId, sku, on = true)
+        }
     }
 
     private fun List<SensiboPodDto>.toDiscovered(): List<DiscoveredDevice> = map { pod ->

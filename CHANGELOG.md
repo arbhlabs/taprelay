@@ -1,5 +1,56 @@
 # TapRelay Changelog
 
+## v0.1.2 - 2026-09-04 (Alpha / Internal Test)
+
+**A tap doesn't have to mean "do it now".** Every trigger now has an activation mode, your
+controller is a real remote, and TapRelay can act on where you are.
+
+### Added
+- **Activation modes.** Each item, and each individual trigger, chooses what firing means:
+  **Execute** (run the action, exactly as before), **Open item** (jump straight to that item), or
+  **Quick Controls** (a small panel so you decide in the moment). A trigger's own choice wins;
+  otherwise the item decides. One controller button can execute a lamp while another opens its
+  controls.
+- **Quick Controls.** A fast, capability-driven panel: device name, icon, live state, and only the
+  controls the real hardware can perform. A light gets power, brightness, white temperature and
+  colour; an air purifier gets power and the fan speeds it actually reports — nothing else. A
+  group only offers what every device in it shares.
+- **Remote Mode.** An always-on remote face: clock and date, your controller and its battery, a
+  drawn pad that rings the buttons you have mapped and flashes the one you just pressed, and a
+  live list of what each button does with its current on/off state. It shows over the lock screen
+  and holds the display awake, then dozes: black background, the panel's own dimmest backlight,
+  the slowest frame rate the display will give, and one redraw a minute. It drifts within safe
+  bounds so nothing burns in, and waking is a deliberate slide rather than a stray tap. Add the
+  **TapRelay Remote** Quick Settings tile to get there from anywhere without opening the app.
+- **Places.** Set a circle where you are standing and have an item fire when you arrive, when you
+  leave, or both — with a different item for each direction. Places survive reboots and app
+  updates, and need location set to "Allow all the time" because Android only lets a geofence fire
+  in the background with it.
+- **Controller rumble.** The pad in your hand buzzes when a button fires: a shaped rise-and-thud
+  on success, three firm knocks on failure, using haptic primitives where the pad supports them.
+- **Preferences**, in one card on Controllers & Remotes rather than a new settings screen:
+  controller rumble, phone haptics, dim-when-idle, Remote Mode spacing (Compact / Normal / Large)
+  and keep-screen-awake.
+
+### Fixed
+- **You couldn't assign a controller button.** The learning step was a dialog, and Android hands
+  gamepad input only to the focused window — so the pad moved system focus around instead of being
+  captured. The learning surface now lives in the app's own window and swallows the whole press.
+- **Sensibo showed fan speeds your unit doesn't have.** The wizard offered High / Med / Low /
+  Quiet / Auto to every climate device. TapRelay now asks the unit what it can actually do: a Pure
+  air purifier that reports only Low and High is offered only Low and High, everywhere. The
+  Low/High tap toggle uses the unit's real slowest and fastest speeds instead of assuming.
+- Landscape is handled properly across the app: the Remote Mode face splits into two panes, the
+  pad drawing is capped so it cannot dominate a wide screen, and Quick Controls and the item sheet
+  scroll instead of clipping on a short screen.
+- A tag driving several lights reads its capabilities in one request per provider rather than one
+  per light.
+
+### About your controller and the background
+Android delivers game-controller buttons only to the app in front. No app can read your pad from
+the background without an accessibility service, which is against Google Play policy for input
+remapping — so TapRelay won't. Remote Mode is the honest answer instead.
+
 ## v0.1.0 - 2026-09-04 (Alpha / Internal Test)
 
 First 0.1 tag. Rolls up everything in 0.0.10 (brightness keeps the light's colour; the 22-colour

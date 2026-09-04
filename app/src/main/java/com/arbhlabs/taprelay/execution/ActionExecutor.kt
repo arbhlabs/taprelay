@@ -167,6 +167,68 @@ class ActionExecutor(
             return
         }
 
+        if (tag.actionType == ActionType.TOGGLE_FAN_SPEED) {
+            onFeedback(TapFeedback("${tag.friendlyName} • Toggling fan…", isError = false, pending = true))
+            try {
+                val p = providers()[tag.providerId]
+                val level = if (p is com.arbhlabs.taprelay.domain.provider.SensiboProvider) {
+                    p.toggleFanSpeed(tag.deviceId)
+                } else {
+                    p?.setPower(tag.deviceId, tag.deviceSku, true)
+                    "High"
+                }
+                val levelName = level.replaceFirstChar { it.uppercase() }
+                val outcome = "Fan $levelName"
+                tags.updateStateAndTimestamp(tag.tagId, 1, System.currentTimeMillis())
+                val duration = System.currentTimeMillis() - startTime
+                tapLogDao?.insert(
+                    TapLogEntity(
+                        tagId = tag.tagId,
+                        tagName = tag.friendlyName,
+                        providerId = tag.providerId,
+                        actionDescription = outcome,
+                        success = true,
+                        durationMs = duration
+                    )
+                )
+                withContext(Dispatchers.Main) {
+                    haptics.vibrateSuccess()
+                    onFeedback(TapFeedback("${tag.friendlyName} • $outcome", isError = false))
+                }
+            } catch (e: TapException) {
+                val duration = System.currentTimeMillis() - startTime
+                tapLogDao?.insert(
+                    TapLogEntity(
+                        tagId = tag.tagId,
+                        tagName = tag.friendlyName,
+                        providerId = tag.providerId,
+                        actionDescription = "Fan toggle failed",
+                        success = false,
+                        errorMessage = e.error.message,
+                        durationMs = duration
+                    )
+                )
+                haptics.vibrateError()
+                onFeedback(TapFeedback(e.error.message, isError = true))
+            } catch (e: Exception) {
+                val duration = System.currentTimeMillis() - startTime
+                tapLogDao?.insert(
+                    TapLogEntity(
+                        tagId = tag.tagId,
+                        tagName = tag.friendlyName,
+                        providerId = tag.providerId,
+                        actionDescription = "Fan toggle failed",
+                        success = false,
+                        errorMessage = TapError.UNKNOWN.message,
+                        durationMs = duration
+                    )
+                )
+                haptics.vibrateError()
+                onFeedback(TapFeedback(TapError.UNKNOWN.message, isError = true))
+            }
+            return
+        }
+
         val finalTarget: Int
         try {
             val intent = tag.actionType.powerIntent()
@@ -197,6 +259,7 @@ class ActionExecutor(
                     val stepAction = if (isRoutineStep) target.actionType!! else tag.actionType
                     val stepBrightness = if (isRoutineStep) target.brightnessPercent else tag.brightnessPercent
                     val stepColor = if (isRoutineStep) target.colorRgb else tag.colorRgb
+                    val stepFanLevel = if (isRoutineStep) target.fanLevel else tag.fanLevel
                     val stepState = if (isRoutineStep) {
                         Toggle.target(stepAction.powerIntent(), finalTarget)
                     } else {
@@ -210,7 +273,8 @@ class ActionExecutor(
                         action = stepAction,
                         targetState = stepState,
                         brightnessPercent = stepBrightness,
-                        colorRgb = stepColor
+                        colorRgb = stepColor,
+                        fanLevel = stepFanLevel
                     )
                     succeeded++
                 } catch (e: TapException) {
@@ -296,8 +360,10 @@ class ActionExecutor(
     private fun settingLabel(tag: TagEntity, state: Int) = outcomeLabel(tag, state) + "…"
 
     private fun outcomeLabel(tag: TagEntity, state: Int): String {
+        if (tag.actionType == ActionType.TOGGLE_FAN_SPEED) return "Fan Low ↔ High"
         if (state != 1) return "Off"
         val parts = buildList {
+            tag.fanLevel?.let { add("Fan ${it.replaceFirstChar { c -> c.uppercase() }}") }
             tag.colorRgb?.let { add(LightPresets.nameFor(it)) }
             tag.brightnessPercent?.let { add("${Brightness.clampPercent(it)}%") }
         }

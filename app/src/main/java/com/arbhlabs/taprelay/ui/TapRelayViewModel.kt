@@ -7,6 +7,7 @@ import com.arbhlabs.taprelay.TapRelayApplication
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.data.secure.TuyaCredentials
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.ActivationMode
 import com.arbhlabs.taprelay.domain.model.powerIntent
 import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.ColorMath
@@ -20,9 +21,18 @@ import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.SENSIBO_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.execution.TapFeedback
+import com.arbhlabs.taprelay.controller.model.ControllerDevice
+import com.arbhlabs.taprelay.controller.model.ControllerInput
+import com.arbhlabs.taprelay.data.local.entity.ControllerMappingEntity
+import com.arbhlabs.taprelay.data.local.entity.PlaceTransition
+import com.arbhlabs.taprelay.data.local.entity.PlaceTriggerEntity
 import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
+import com.arbhlabs.taprelay.data.prefs.AodDensity
 import com.arbhlabs.taprelay.monetization.TapRelayProFeature
 import com.arbhlabs.taprelay.nfc.NfcPayloadParser
+import com.arbhlabs.taprelay.trigger.ActivationPresenter
+import com.arbhlabs.taprelay.trigger.TriggerSource
+import com.arbhlabs.taprelay.ui.quick.QuickControlsSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -60,6 +70,11 @@ data class WizardState(
     /** Colour and brightness are optional extras on top of whatever the power action is. */
     val wantsColor: Boolean = false,
     val wantsBrightness: Boolean = false,
+    val wantsFanSpeed: Boolean = false,
+    val fanLevel: String = "high",
+    /** Fan levels the picked climate devices actually report. Empty until they are read. */
+    val fanLevels: List<String> = emptyList(),
+    val readingCapabilities: Boolean = false,
     val colorRgb: Int = LightPresets.DEFAULT_RGB,
     /** Which face of the colour picker is showing: named presets or the white-temperature slider. */
     val colorPickingWhite: Boolean = false,
@@ -75,7 +90,9 @@ data class WizardState(
     val startMinute: Int = 0,
     val endHour: Int = 22,
     val endMinute: Int = 0,
-    val offActionType: ActionType = ActionType.TURN_OFF
+    val offActionType: ActionType = ActionType.TURN_OFF,
+    /** What a trigger does when it lands on this item. */
+    val activationMode: ActivationMode = ActivationMode.EXECUTE
 )
 
 data class HomeUiState(
@@ -175,6 +192,23 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _setupPrompt = MutableStateFlow<String?>(null)
     val setupPrompt = _setupPrompt.asStateFlow()
+
+    /** The Quick Controls surface shown inside the app. */
+    val quickControls = QuickControlsSession(services, viewModelScope)
+
+    private val _openItemTagId = MutableStateFlow<String?>(null)
+    val openItemTagId = _openItemTagId.asStateFlow()
+
+    /** How this app shows an item when a trigger asks for a surface rather than an action. */
+    val presenter: ActivationPresenter = object : ActivationPresenter {
+        override fun openItem(tagId: String) { _openItemTagId.value = tagId }
+        override fun openQuickControls(tagId: String) { quickControls.open(tagId) }
+    }
+
+    fun openItem(tagId: String) { presenter.openItem(tagId) }
+    fun openQuickControls(tagId: String) { presenter.openQuickControls(tagId) }
+    fun closeItem() { _openItemTagId.value = null }
+    fun closeQuickControls() { quickControls.close() }
 
     private val _nfcReady = MutableStateFlow(true)
     val nfcReady = _nfcReady.asStateFlow()
@@ -409,7 +443,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             startMinute = existing?.startMinute ?: 0,
             endHour = existing?.endHour ?: 22,
             endMinute = existing?.endMinute ?: 0,
-            offActionType = existing?.offActionType ?: ActionType.TURN_OFF
+            offActionType = existing?.offActionType ?: ActionType.TURN_OFF,
+            wantsFanSpeed = existing?.fanLevel != null,
+            fanLevel = existing?.fanLevel ?: "high",
+            activationMode = existing?.activation ?: ActivationMode.EXECUTE
         )
         discoverDevicesAndScenes()
     }
@@ -432,6 +469,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             colorPickingWhite = tag.colorRgb?.let { ColorMath.nearestKelvin(it) != null } ?: false,
             whiteKelvin = tag.colorRgb?.let { ColorMath.nearestKelvin(it) } ?: 2700,
             wantsBrightness = tag.brightnessPercent != null,
+            wantsFanSpeed = tag.fanLevel != null,
+            fanLevel = tag.fanLevel ?: "high",
             pendingTargetIds = tag.allTargets.map { it.deviceId },
             name = tag.friendlyName,
             iconKey = tag.iconKey,
@@ -440,7 +479,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             startMinute = tag.startMinute ?: 0,
             endHour = tag.endHour ?: 22,
             endMinute = tag.endMinute ?: 0,
-            offActionType = tag.offActionType ?: ActionType.TURN_OFF
+            offActionType = tag.offActionType ?: ActionType.TURN_OFF,
+            activationMode = tag.activation
         )
         discoverDevicesAndScenes()
     }
@@ -506,10 +546,12 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     fun continueFromDevices() {
         val picked = _wizard.value.selectedDevices
         if (picked.isEmpty()) return
+        val isClimate = picked.all { it.providerId == SENSIBO_PROVIDER_ID }
         val action = _wizard.value.action
         // Drop an action the new selection cannot all perform.
         val stillValid = when (action) {
             ActionType.RUN_SCENE -> false
+            ActionType.TOGGLE_FAN_SPEED -> isClimate
             else -> true
         }
         _wizard.value = _wizard.value.copy(
@@ -517,8 +559,43 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             scene = null,
             targetType = TargetType.DEVICE,
             action = if (stillValid) action else ActionType.TOGGLE,
+            iconKey = if (isClimate) "air" else if (_wizard.value.iconKey == "air") "lamp" else _wizard.value.iconKey,
             name = _wizard.value.name.ifBlank { defaultNameFor(picked) },
+            fanLevels = if (isClimate) _wizard.value.fanLevels else emptyList(),
             step = WizardStep.PICK_ACTION
+        )
+        if (isClimate) loadClimateCapabilities(picked) else Unit
+    }
+
+    /**
+     * Asks the picked devices what fan levels they really have, so the wizard never offers a
+     * speed the hardware cannot do. A group only offers what all of its devices share.
+     */
+    private fun loadClimateCapabilities(picked: List<DiscoveredDevice>) = viewModelScope.launch {
+        _wizard.value = _wizard.value.copy(readingCapabilities = true)
+        val read = runCatching {
+            picked.groupBy { it.providerId }
+                .flatMap { (providerId, devices) ->
+                    services.providers[providerId]
+                        ?.getCapabilities(devices.map { it.deviceId to it.sku })
+                        .orEmpty()
+                }
+                .map { it.fanLevels }
+                .reduceOrNull { a, b -> a.filter { it in b } } ?: emptyList()
+        }.getOrDefault(emptyList())
+
+        val w = _wizard.value
+        // A failed read leaves whatever we already knew rather than wiping the options.
+        val levels = read.ifEmpty { w.fanLevels }
+        val level = if (levels.isEmpty() || levels.any { it.equals(w.fanLevel, true) }) w.fanLevel
+        else levels.last()
+        _wizard.value = w.copy(
+            readingCapabilities = false,
+            fanLevels = levels,
+            fanLevel = level,
+            // A single-speed unit cannot flip between two speeds.
+            action = if (w.action == ActionType.TOGGLE_FAN_SPEED && levels.size in 1 until 2)
+                ActionType.TOGGLE else w.action
         )
     }
 
@@ -545,10 +622,16 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setWantsBrightness(v: Boolean) { _wizard.value = _wizard.value.copy(wantsBrightness = v) }
 
+    fun setWantsFanSpeed(v: Boolean) { _wizard.value = _wizard.value.copy(wantsFanSpeed = v) }
+
+    fun setFanLevel(v: String) { _wizard.value = _wizard.value.copy(fanLevel = v) }
+
     fun continueFromAction() {
         val w = _wizard.value
+        val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
+        val isClimate = picked.isNotEmpty() && picked.all { it.providerId == SENSIBO_PROVIDER_ID }
         _wizard.value = w.copy(
-            step = if (w.wantsColor || w.wantsBrightness) WizardStep.TUNE else WizardStep.NAME
+            step = if (!isClimate && (w.wantsColor || w.wantsBrightness)) WizardStep.TUNE else WizardStep.NAME
         )
     }
 
@@ -577,6 +660,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun confirmTuning() { _wizard.value = _wizard.value.copy(step = WizardStep.NAME) }
+
+    fun setActivationMode(mode: ActivationMode) {
+        _wizard.value = _wizard.value.copy(activationMode = mode)
+    }
 
     fun setName(v: String) { _wizard.value = _wizard.value.copy(name = v) }
     fun setIcon(v: String) { _wizard.value = _wizard.value.copy(iconKey = v) }
@@ -620,13 +707,23 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 endHour = if (w.timeConditionEnabled) w.endHour else null,
                 endMinute = if (w.timeConditionEnabled) w.endMinute else null,
                 offActionType = if (w.timeConditionEnabled) w.offActionType else null,
+                activationMode = w.activationMode,
                 modifiedAt = System.currentTimeMillis()
             )
         } else {
             val picked = w.selectedDevices.ifEmpty { listOfNotNull(w.device) }
             val device = picked.firstOrNull() ?: return@launch
+            val isClimate = picked.any { it.providerId == SENSIBO_PROVIDER_ID }
+            val finalAction = w.action.powerIntent()
+            val finalFanLevel = if (isClimate && (w.action == ActionType.TOGGLE_FAN_SPEED || w.wantsFanSpeed)) w.fanLevel else null
             val extras = picked.drop(1).map {
-                TagTarget(providerId = it.providerId, deviceId = it.deviceId, sku = it.sku, name = it.name)
+                TagTarget(
+                    providerId = it.providerId,
+                    deviceId = it.deviceId,
+                    sku = it.sku,
+                    name = it.name,
+                    fanLevel = if (it.providerId == SENSIBO_PROVIDER_ID && (w.action == ActionType.TOGGLE_FAN_SPEED || w.wantsFanSpeed)) w.fanLevel else null
+                )
             }
             (existing ?: TagEntity(
                 tagId = id,
@@ -635,7 +732,7 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 providerId = device.providerId,
                 deviceId = device.deviceId,
                 deviceSku = device.sku,
-                actionType = w.action,
+                actionType = finalAction,
                 targetType = TargetType.DEVICE
             )).copy(
                 friendlyName = w.name.ifBlank { device.name },
@@ -644,9 +741,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 deviceSku = device.sku,
                 providerId = device.providerId,
                 targetType = TargetType.DEVICE,
-                actionType = w.action.powerIntent(),
+                actionType = finalAction,
                 brightnessPercent = w.brightnessPercent.takeIf { w.wantsBrightness },
                 colorRgb = w.colorRgb.takeIf { w.wantsColor },
+                fanLevel = finalFanLevel,
                 additionalTargets = extras,
                 timeConditionEnabled = w.timeConditionEnabled,
                 startHour = if (w.timeConditionEnabled) w.startHour else null,
@@ -654,6 +752,7 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
                 endHour = if (w.timeConditionEnabled) w.endHour else null,
                 endMinute = if (w.timeConditionEnabled) w.endMinute else null,
                 offActionType = if (w.timeConditionEnabled) w.offActionType else null,
+                activationMode = w.activationMode,
                 modifiedAt = System.currentTimeMillis()
             )
         }
@@ -704,7 +803,11 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val known = services.tagRepository.getTagById(tagId) != null
             if (known) {
-                services.actionExecutor.executeByTagId(tagId) { fb -> _pill.value = fb }
+                services.triggerRouter.fire(
+                    tagId = tagId,
+                    source = TriggerSource.NFC,
+                    presenter = presenter
+                ) { fb -> _pill.value = fb }
             } else {
                 _setupPrompt.value = tagId
             }
@@ -714,4 +817,194 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissSetupPrompt() { _setupPrompt.value = null }
     fun showPill(fb: TapFeedback) { _pill.value = fb }
     fun clearPill() { _pill.value = null }
+
+    // ---- Places (geofenced routines) ----
+
+    val placeTriggers: StateFlow<List<PlaceTriggerEntity>> =
+        services.placeTriggerDao.observeAll()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _locationPermission = MutableStateFlow(LocationPermission())
+    val locationPermission = _locationPermission.asStateFlow()
+
+    data class LocationPermission(
+        val foreground: Boolean = false,
+        val background: Boolean = false
+    )
+
+    fun refreshLocationPermission() {
+        _locationPermission.value = LocationPermission(
+            foreground = services.geofenceManager.hasForegroundLocation(),
+            background = services.geofenceManager.hasBackgroundLocation()
+        )
+        // Granting "all the time" later is the usual path, so re-register whenever it changes.
+        if (_locationPermission.value.background) syncGeofences()
+    }
+
+    fun syncGeofences() = viewModelScope.launch {
+        val ok = services.geofenceManager.syncAll()
+        if (!ok && services.placeTriggerDao.getEnabled().isNotEmpty()) {
+            _pill.value = TapFeedback(
+                "Places need location set to \"Allow all the time\".",
+                isError = true
+            )
+        }
+    }
+
+    private val _pickedLocation = MutableStateFlow<Pair<Double, Double>?>(null)
+    val pickedLocation = _pickedLocation.asStateFlow()
+
+    private val _locating = MutableStateFlow(false)
+    val locating = _locating.asStateFlow()
+
+    fun useCurrentLocation() = viewModelScope.launch {
+        _locating.value = true
+        val loc = services.geofenceManager.currentLocation()
+        _locating.value = false
+        if (loc == null) {
+            _pill.value = TapFeedback("Couldn't get a location fix.", isError = true)
+        } else {
+            _pickedLocation.value = loc.latitude to loc.longitude
+        }
+    }
+
+    fun clearPickedLocation() { _pickedLocation.value = null }
+
+    fun savePlace(
+        name: String,
+        latitude: Double,
+        longitude: Double,
+        radiusMeters: Float,
+        transition: PlaceTransition,
+        tagId: String,
+        leaveTagId: String?
+    ) = viewModelScope.launch {
+        services.placeTriggerDao.insert(
+            PlaceTriggerEntity(
+                name = name.ifBlank { "Place" },
+                latitude = latitude,
+                longitude = longitude,
+                radiusMeters = radiusMeters,
+                transition = transition,
+                tagId = tagId,
+                leaveTagId = leaveTagId
+            )
+        )
+        _pickedLocation.value = null
+        services.haptics.vibrateSuccess()
+        syncGeofences()
+    }
+
+    fun setPlaceEnabled(trigger: PlaceTriggerEntity, enabled: Boolean) = viewModelScope.launch {
+        services.placeTriggerDao.update(trigger.copy(enabled = enabled))
+        syncGeofences()
+    }
+
+    fun deletePlace(trigger: PlaceTriggerEntity) = viewModelScope.launch {
+        services.placeTriggerDao.delete(trigger)
+        syncGeofences()
+    }
+
+    // ---- Game Controller Remote Integration ----
+    val connectedControllers: StateFlow<List<ControllerDevice>> =
+        services.controllerManager.connectedControllers
+
+    val isControllerLearning: StateFlow<Boolean> =
+        services.controllerManager.isLearningMode
+
+    val capturedControllerInput: StateFlow<ControllerInput?> =
+        services.controllerManager.capturedInput
+
+    val controllerMappings: StateFlow<List<ControllerMappingEntity>> =
+        services.controllerMappingDao.observeAll()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // ---- Feedback & Remote Mode preferences ----
+    val controllerRumble: StateFlow<Boolean> = services.preferences.controllerRumble
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val phoneHaptics: StateFlow<Boolean> = services.preferences.phoneHaptics
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val remoteAutoDim: StateFlow<Boolean> = services.preferences.remoteAutoDim
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val aodDensity: StateFlow<AodDensity> = services.preferences.aodDensity
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AodDensity.NORMAL)
+
+    fun setAodDensity(value: AodDensity) = viewModelScope.launch {
+        services.preferences.setAodDensity(value)
+    }
+
+    fun setControllerRumble(value: Boolean) = viewModelScope.launch {
+        services.preferences.setControllerRumble(value)
+        if (value) services.haptics.vibrateTick()
+    }
+
+    fun setPhoneHaptics(value: Boolean) = viewModelScope.launch {
+        services.preferences.setPhoneHaptics(value)
+    }
+
+    fun setRemoteAutoDim(value: Boolean) = viewModelScope.launch {
+        services.preferences.setRemoteAutoDim(value)
+    }
+
+    private val _keepScreenAwake = MutableStateFlow(false)
+    val keepScreenAwake: StateFlow<Boolean> = _keepScreenAwake.asStateFlow()
+
+    fun setKeepScreenAwake(keep: Boolean) {
+        _keepScreenAwake.value = keep
+    }
+
+    fun startControllerLearning() {
+        services.controllerManager.startLearning()
+    }
+
+    fun stopControllerLearning() {
+        services.controllerManager.stopLearning()
+    }
+
+    fun refreshControllers() {
+        services.controllerManager.refreshConnectedControllers()
+    }
+
+    fun saveControllerMapping(
+        controllerDescriptor: String,
+        controllerName: String,
+        inputKey: String,
+        inputLabel: String,
+        tagId: String,
+        activationMode: ActivationMode? = null
+    ) = viewModelScope.launch {
+        services.controllerMappingDao.insert(
+            ControllerMappingEntity(
+                controllerDescriptor = controllerDescriptor,
+                controllerName = controllerName,
+                inputKey = inputKey,
+                inputLabel = inputLabel,
+                tagId = tagId,
+                activationMode = activationMode
+            )
+        )
+        services.haptics.vibrateSuccess()
+        _pill.value = TapFeedback("Mapping saved for $inputLabel", isError = false)
+    }
+
+    fun deleteControllerMapping(id: Long) = viewModelScope.launch {
+        services.controllerMappingDao.deleteById(id)
+        services.haptics.vibrateClick()
+    }
+
+    fun setControllerMappingActivationMode(
+        mapping: ControllerMappingEntity,
+        mode: ActivationMode?
+    ) = viewModelScope.launch {
+        services.controllerMappingDao.update(mapping.copy(activationMode = mode))
+        services.haptics.vibrateClick()
+    }
+
+    fun toggleControllerMapping(mapping: ControllerMappingEntity) = viewModelScope.launch {
+        services.controllerMappingDao.update(mapping.copy(enabled = !mapping.enabled))
+    }
+
+    fun testControllerMapping(tagId: String) {
+        services.actionExecutor.executeByTagId(tagId) { fb -> _pill.value = fb }
+    }
 }

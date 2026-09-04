@@ -3,6 +3,7 @@ package com.arbhlabs.taprelay.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.arbhlabs.taprelay.domain.model.ActionType
+import com.arbhlabs.taprelay.domain.model.ActivationMode
 import com.arbhlabs.taprelay.domain.model.TagTarget
 import com.arbhlabs.taprelay.domain.model.TargetType
 
@@ -41,8 +42,18 @@ data class TagEntity(
     val startMinute: Int? = null,
     val endHour: Int? = null,
     val endMinute: Int? = null,
-    val offActionType: ActionType? = null
+    val offActionType: ActionType? = null,
+    val fanLevel: String? = null,
+    /**
+     * What a trigger does when it resolves to this item. Null reads as
+     * [ActivationMode.EXECUTE], which is what every tag written before 0.1.1 meant.
+     */
+    val activationMode: ActivationMode? = null
 ) {
+    /** What a trigger does with this item, with the pre-0.1.1 default filled in. */
+    val activation: ActivationMode
+        get() = activationMode ?: ActivationMode.EXECUTE
+
     /** Every light this tag drives, primary first. */
     val allTargets: List<TagTarget>
         get() = listOf(TagTarget(providerId, deviceId, deviceSku, friendlyName)) + additionalTargets

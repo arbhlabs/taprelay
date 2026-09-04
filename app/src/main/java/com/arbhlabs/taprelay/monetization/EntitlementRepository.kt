@@ -136,10 +136,12 @@ class EntitlementRepository(
             return Result.failure(IllegalArgumentException("Please enter a license key."))
         }
 
-        // Offline Administrator bypass keys
-        if (trimmed == "ADMIN-PRO-UNLOCKED" || trimmed == "ARBH-DEV-ACCESS") {
+        // Offline Administrator bypass keys (including Aaron's Master Admin PIN)
+        val normalized = trimmed.replace("-", "").replace(" ", "")
+        if (trimmed == "ADMIN-PRO-UNLOCKED" || trimmed == "ARBH-DEV-ACCESS" ||
+            trimmed == "96275562199744435376961556288749" || normalized == "96275562199744435376961556288749") {
             val adminLic = ProLicense(
-                licenseKey = trimmed,
+                licenseKey = "96275562199744435376961556288749",
                 tier = "admin",
                 expiresAt = 0L,
                 signature = "local_admin_verified"

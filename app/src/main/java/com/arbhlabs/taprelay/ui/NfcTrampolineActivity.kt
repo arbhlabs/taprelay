@@ -14,6 +14,9 @@ import androidx.lifecycle.lifecycleScope
 import com.arbhlabs.taprelay.TapRelayApplication
 import com.arbhlabs.taprelay.execution.TapFeedback
 import com.arbhlabs.taprelay.nfc.NfcPayloadParser
+import com.arbhlabs.taprelay.trigger.ActivationPresenter
+import com.arbhlabs.taprelay.trigger.TriggerSource
+import com.arbhlabs.taprelay.ui.quick.QuickControlsActivity
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
 import com.arbhlabs.taprelay.ui.theme.TapRelayTheme
 import kotlinx.coroutines.delay
@@ -46,10 +49,37 @@ class NfcTrampolineActivity : ComponentActivity() {
         val id = NfcPayloadParser.parseUuidFromUri(intent?.data)
         if (id == null) { finish(); return }
         val services = (application as TapRelayApplication).services
-        services.actionExecutor.executeByTagId(id) { fb -> runOnUiThread { feedback = fb } }
+
+        // Out of the app, a surface means starting a real activity — no overlay, no
+        // accessibility service, nothing that needs a special permission.
+        val presenter = object : ActivationPresenter {
+            override fun openItem(tagId: String) =
+                present(MainActivity.openItemIntent(this@NfcTrampolineActivity, tagId), tagId)
+
+            override fun openQuickControls(tagId: String) =
+                present(QuickControlsActivity.intent(this@NfcTrampolineActivity, tagId), tagId)
+
+            /** A tap must always do something: if the surface cannot open, run the action. */
+            private fun present(intent: Intent, tagId: String) {
+                if (runCatching { startActivity(intent) }.isSuccess) {
+                    finish()
+                } else {
+                    services.actionExecutor.executeByTagId(tagId) { fb ->
+                        runOnUiThread { feedback = fb }
+                    }
+                }
+            }
+        }
+
+        services.triggerRouter.fire(
+            tagId = id,
+            source = TriggerSource.NFC,
+            presenter = presenter
+        ) { fb -> runOnUiThread { feedback = fb } }
+
         lifecycleScope.launch {
             delay(2600)
-            finish()
+            if (!isFinishing) finish()
         }
     }
 }

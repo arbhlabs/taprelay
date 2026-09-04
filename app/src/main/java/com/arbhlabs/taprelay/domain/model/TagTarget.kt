@@ -15,5 +15,6 @@ data class TagTarget(
     /** If set, this target runs its own action instead of following the primary. */
     val actionType: ActionType? = null,
     val brightnessPercent: Int? = null,
-    val colorRgb: Int? = null
+    val colorRgb: Int? = null,
+    val fanLevel: String? = null
 )

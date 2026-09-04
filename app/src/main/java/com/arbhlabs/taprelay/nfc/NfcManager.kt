@@ -1,6 +1,9 @@
 package com.arbhlabs.taprelay.nfc
 
 import android.app.Activity
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.IntentFilter
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
@@ -9,8 +12,10 @@ import android.nfc.TagLostException
 import android.nfc.tech.Ndef
 import android.nfc.tech.NdefFormatable
 import android.os.Bundle
+import android.os.PatternMatcher
 import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.TapException
+import java.nio.charset.StandardCharsets
 
 /** What TapRelay found when it looked at a physical tag. */
 sealed interface TagInspection {
@@ -47,6 +52,65 @@ class NfcManager(private val activity: Activity) {
     }
 
     fun disableReader() = adapter?.disableReaderMode(activity)
+
+    /**
+     * Enables selective foreground dispatch for TapRelay tags only.
+     * When active, unrelated NFC tags (such as LastDose medication tags)
+     * are NOT intercepted and fall through directly to the system intent dispatcher.
+     */
+    fun enableForegroundDispatch(targetActivity: Activity) {
+        val intent = Intent(targetActivity, targetActivity.javaClass).apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            targetActivity,
+            0,
+            intent,
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val filter = IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED).apply {
+            addDataScheme("https")
+            addDataAuthority(NfcPayloadParser.HOST, null)
+            addDataPath("/t/", PatternMatcher.PATTERN_PREFIX)
+        }
+        adapter?.enableForegroundDispatch(targetActivity, pendingIntent, arrayOf(filter), null)
+    }
+
+    fun disableForegroundDispatch(targetActivity: Activity) {
+        adapter?.disableForegroundDispatch(targetActivity)
+    }
+
+    /**
+     * Identifies if a tag belongs to LastDose (carrying arbhlabs.com:ldtag or com.lastdose.app AAR).
+     */
+    fun isLastDoseTag(tag: Tag): Boolean {
+        val ndef = Ndef.get(tag) ?: return false
+        return try {
+            ndef.connect()
+            val message = ndef.cachedNdefMessage ?: runCatching { ndef.ndefMessage }.getOrNull()
+            runCatching { ndef.close() }
+            message?.let { isLastDoseMessage(it) } ?: false
+        } catch (e: Exception) {
+            runCatching { ndef.close() }
+            false
+        }
+    }
+
+    fun isLastDoseMessage(message: NdefMessage): Boolean {
+        val records = message.records ?: return false
+        for (rec in records) {
+            val typeStr = runCatching { String(rec.type, StandardCharsets.US_ASCII) }.getOrNull()?.lowercase() ?: ""
+            val payloadStr = runCatching { String(rec.payload, StandardCharsets.UTF_8) }.getOrNull()?.lowercase() ?: ""
+            if (typeStr.contains("ldtag") ||
+                typeStr.contains("arbhlabs.com:ldtag") ||
+                payloadStr.contains("com.lastdose.app") ||
+                payloadStr.contains("arbhlabs.com:ldtag")
+            ) {
+                return true
+            }
+        }
+        return false
+    }
 
     /** Classify a tag for the Add Tag flow. Never throws. */
     fun inspect(tag: Tag): TagInspection {
