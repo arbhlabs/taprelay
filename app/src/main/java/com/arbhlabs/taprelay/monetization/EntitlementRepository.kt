@@ -26,10 +26,15 @@ import kotlinx.serialization.json.Json
 import java.util.UUID
 
 enum class TapRelayProFeature {
+    // Free, permanently. Each of these operates on Govee, Tuya or Sensibo cloud devices.
     MULTI_DEVICE_ROUTINES,
     TIME_OF_DAY_CONDITIONS,
     TAP_DIAGNOSTICS_REPLAY,
-    TAG_STORE_DISCOUNT
+    TAG_STORE_DISCOUNT,
+
+    // Pro. Neither reaches a vendor cloud API.
+    HOME_ASSISTANT_TARGET,
+    WEBHOOK_ACTION
 }
 
 @Serializable
@@ -84,14 +89,21 @@ class EntitlementRepository(
     }
 
     /**
-     * Every feature is free.
+     * Vendor cloud control is free, permanently.
      *
-     * The Govee and Tuya developer APIs TapRelay is built on are licensed for personal,
-     * non-commercial use, which a paid tier gating access to them does not fit. The licensing
-     * plumbing below is left intact and inert rather than ripped out, so nothing that reads a
-     * stored licence breaks, but no capability depends on it.
+     * The Govee and Tuya developer APIs are licensed for personal, non-commercial use, and the
+     * Govee terms forbid charging any third party for use of the API implementation. So nothing
+     * that reaches a vendor cloud may sit behind the paywall: MULTI_DEVICE_ROUTINES,
+     * TIME_OF_DAY_CONDITIONS, TAP_DIAGNOSTICS_REPLAY and TAG_STORE_DISCOUNT all operate on
+     * Govee, Tuya or Sensibo devices and stay free for everyone.
+     *
+     * Pro covers only what TapRelay does without a vendor cloud: Home Assistant, which is
+     * self-hosted and Apache-2.0 licensed, and raw web actions, which reach whatever address the
+     * user points them at. Someone who never touches Govee still receives the whole of what they
+     * paid for, which is what makes the tier coherent as well as compliant.
      */
-    fun canAccess(feature: TapRelayProFeature): Boolean = true
+    fun canAccess(feature: TapRelayProFeature): Boolean =
+        if (feature in PRO_ONLY_FEATURES) _isPro.value else true
 
     fun isTrialActive(): Boolean {
         val lic = _proLicense.value ?: return false
@@ -198,5 +210,12 @@ class EntitlementRepository(
         secureStorage?.clearProLicense()
         _proLicense.value = null
         _isPro.value = false
+    }
+
+    companion object {
+        private val PRO_ONLY_FEATURES = setOf(
+            TapRelayProFeature.HOME_ASSISTANT_TARGET,
+            TapRelayProFeature.WEBHOOK_ACTION
+        )
     }
 }

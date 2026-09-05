@@ -12,6 +12,7 @@ import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.domain.model.TapError
 import com.arbhlabs.taprelay.domain.model.Toggle
 import com.arbhlabs.taprelay.domain.model.TapException
+import com.arbhlabs.taprelay.domain.provider.HOME_ASSISTANT_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.SmartHomeProvider
 import com.arbhlabs.taprelay.domain.repository.TagRepository
 import com.arbhlabs.taprelay.data.local.dao.TapLogDao
@@ -319,6 +320,12 @@ class ActionExecutor(
         silent: Boolean,
         onFeedback: (TapFeedback) -> Unit
     ): TapOutcome {
+        if (entitlements != null && !entitlements.canAccess(TapRelayProFeature.WEBHOOK_ACTION)) {
+            return finishFailure(
+                tag, WEBHOOK_PROVIDER_ID, startTime, silent, onFeedback,
+                "Web actions need TapRelay Pro. Your smart-home tags keep working."
+            )
+        }
         val client = webhooks
         val url = tag.webhookUrl?.trim().orEmpty()
         if (client == null || url.isBlank()) {
@@ -413,6 +420,19 @@ class ActionExecutor(
         silent: Boolean,
         onFeedback: (TapFeedback) -> Unit
     ): TapOutcome {
+        // Home Assistant is a Pro target. Govee, Smart Life and Sensibo are not gated and never
+        // will be: their developer terms forbid charging for use of the API implementation.
+        val usesHomeAssistant = rawTag.providerId == HOME_ASSISTANT_PROVIDER_ID ||
+            rawTag.allTargets.any { it.providerId == HOME_ASSISTANT_PROVIDER_ID }
+        if (usesHomeAssistant && entitlements != null &&
+            !entitlements.canAccess(TapRelayProFeature.HOME_ASSISTANT_TARGET)
+        ) {
+            return finishFailure(
+                rawTag, rawTag.providerId, startTime, silent, onFeedback,
+                "Home Assistant tags need TapRelay Pro. Your Govee, Smart Life and Sensibo tags keep working."
+            )
+        }
+
         // Context-aware time-of-day condition evaluation.
         val tag = if (rawTag.timeConditionEnabled &&
             (entitlements == null || entitlements.canAccess(TapRelayProFeature.TIME_OF_DAY_CONDITIONS))
