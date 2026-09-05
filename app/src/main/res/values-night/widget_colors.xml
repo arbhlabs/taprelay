@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The same palette after dark, for devices without Material You (API 30). -->
+<resources>
+    <color name="widget_surface">#FF10161A</color>
+    <color name="widget_tile">#FF1C242A</color>
+    <color name="widget_tile_active">#FF0E4A44</color>
+    <color name="widget_accent">#FF5BE7D6</color>
+    <color name="widget_on_accent">#FF00332F</color>
+    <color name="widget_text">#FFE7EDEC</color>
+    <color name="widget_text_dim">#FFAFC0BE</color>
+    <color name="widget_error">#FFFFB4AB</color>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Widget palette, light theme, for devices without Material You (API 30).
+    The v31 copies of this file swap every one of these for the system's wallpaper-derived
+    tokens, which is what makes the widget look like it belongs on a Pixel home screen.
+-->
+<resources>
+    <color name="widget_surface">#FFF3F7F6</color>
+    <color name="widget_tile">#FFE1EBE9</color>
+    <color name="widget_tile_active">#FFB9F3EC</color>
+    <color name="widget_accent">#FF00635C</color>
+    <color name="widget_on_accent">#FFFFFFFF</color>
+    <color name="widget_text">#FF0B1513</color>
+    <color name="widget_text_dim">#FF4A5F5C</color>
+    <color name="widget_error">#FFB3261E</color>
+</resources>

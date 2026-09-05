@@ -1,5 +1,49 @@
 # TapRelay Changelog
 
+## v0.2.1 - 2026-09-05 (Alpha / Internal Test)
+
+**Turn anything into a programmable button.** One press now runs a whole sequence, Home Assistant
+joins the providers, and TapRelay reaches the home screen.
+
+### Added
+- **Magic Actions.** One trigger runs several of your actions in order, with optional pauses.
+  Lights off, air down, log to LastDose, phone quiet - from one tap on a sticker, one controller
+  button, one press on the always-on face, or one home-screen tile. Start from a template
+  (Bedtime, Gaming, Desk Mode, Movie Time, Leaving Home, Quick Log) and it fills itself in from
+  the actions you already have. If a step cannot be reached the rest still run, and TapRelay says
+  which one did not: `4 of 5 done - Air purifier unavailable`.
+- **Home Assistant, as an ordinary connection.** Give TapRelay your instance's address and an
+  access token you create yourself, and it discovers your lights, switches, fans, scenes and
+  scripts. They behave like any other TapRelay device from that moment - on a tag, on a controller
+  button, inside a Magic Action, on a widget. TapRelay talks to your instance directly; nothing is
+  proxied and no ARBH Labs server is involved.
+- **Home-screen widgets.** An Action Key for one action, and a resizable Remote for up to six.
+  Both follow your wallpaper colours on Android 12 and later, and change layout as you resize them
+  instead of clipping. A tile shows it is running the moment you touch it.
+- **A redesigned always-on face**, built around the actions you use most: one large primary
+  button, the rest underneath, a compact hardware line, and nothing else. Choose and reorder your
+  favourites under **Always-on face**. One tap arms a button and the second runs it, so a sleeve on
+  the glass cannot turn the bedroom lights off - switchable if you want it immediate.
+- **Three new kinds of action:** open an app or a link, switch Do Not Disturb, and send a web
+  request to an address you already have. A web request's key is encrypted on your phone and never
+  written to your action history, which keeps only the method and the host.
+
+### Fixed
+- Selected chips and buttons were drawn in Android's default purple rather than TapRelay's own
+  colour, because half the Material colour roles were never defined.
+- New screens described every device as "Device" instead of Govee, Smart Life, Sensibo or Home
+  Assistant.
+- The feedback message covered the title of the screen it appeared over. It now sits below it, and
+  shows how far through a Magic Action is.
+- Reading your saved connections decrypted them on the main thread during launch, which showed as
+  a stutter on the first screen.
+- The connections chip listed every provider by name and stopped fitting at four.
+
+### Notes
+- Upgrades in place from 0.1.5. Existing tags, controller mappings, places and LastDose items are
+  preserved (database schema 11).
+- Everything is still free. No subscription, no trial, no tag limit.
+
 ## v0.1.4 - 2026-09-04 (Alpha / Internal Test)
 
 **Your controller can log to LastDose.** Pull the right trigger and one entry lands in LastDose -

@@ -1,8 +1,10 @@
 # TapRelay — start here
 
 Android app (`com.arbhlabs.taprelay`) that turns NFC tags, game-controller buttons and places
-into smart-home actions across Govee, Tuya/Smart Life and Sensibo — and, since 0.1.4, into
-LastDose log entries written without LastDose ever opening.
+into smart-home actions across Govee, Tuya/Smart Life, Sensibo and the owner's own Home Assistant
+— and, since 0.1.4, into LastDose log entries written without LastDose ever opening. Since 0.2.1 a
+single trigger can run a whole sequence of those (a **Magic Action**), and TapRelay also reaches
+the home screen as a widget and the lock screen as an always-on face.
 
 ## Read these first
 
@@ -10,7 +12,9 @@ LastDose log entries written without LastDose ever opening.
 |---|---|
 | `HANDOFF.md` | **Current state, what is half-finished, and the exact steps to finish it.** Read before touching anything. |
 | `RESEARCH_BRIEF_NEXT.md` | The research + design brief for the next version (Devices dashboard). |
-| `docs/QA-v0.1.4.md` | The current release's QA record, incl. what is still unverified on device. |
+| `docs/QA-v0.2.1.md` | The current release's QA record. **§3 lists what was NOT verified on hardware.** |
+| `docs/RESEARCH_0.2.1.md` | Why 0.2.1 is shaped this way: evidence, competitor pricing, monetisation stance, execution semantics, performance findings acted on. |
+| `docs/QA-v0.1.4.md` | The 0.1.4 QA record; still the reference for the LastDose link. |
 | `docs/QA-v0.1.2.md` | The 0.1.2 QA record; still the reference for Remote Mode and Quick Controls. |
 | `CHANGELOG.md` | User-facing history. |
 | `dist/SITE_PUBLISH.md` | Release/publish pipeline and the rules that constrain it. |
@@ -28,8 +32,12 @@ Signing comes from `signing.properties` at the repo root. Never print or commit 
 ## Non-negotiables
 
 1. **No paywall.** The Govee and Tuya developer APIs are licensed for personal, non-commercial
-   use. `EntitlementRepository.canAccess()` returns `true` for everything and must stay that way.
-   The licence plumbing is intentionally left intact but inert.
+   use, the live download page states TapRelay is free, and `dist/SITE_PUBLISH.md` says the same.
+   `EntitlementRepository.canAccess()` returns `true` for everything and must stay that way.
+   The licence plumbing, the feature enum and every gate call site are intentionally intact but
+   inert, so enabling the boundary is one function body if the owner ever decides to. The full
+   reasoning, including that off-Play distribution needs no Play Billing, is in
+   `docs/RESEARCH_0.2.1.md` §5. **Do not enable it without Aaron saying so explicitly.**
 2. **Published versions are immutable.** An APK already uploaded to R2 at a given version must
    never be overwritten with different bytes. Cut a new version instead.
 3. **Room migrations are never destructive.** No `fallbackToDestructiveMigration`. Every schema
@@ -47,6 +55,8 @@ Signing comes from `signing.properties` at the repo root. Never print or commit 
 `trigger -> item -> activation mode -> execute / open item / Quick Controls`, all through
 `trigger/TriggerRouter.kt`. Adding a trigger type means calling `fire()`, not adding a new
 execution path; adding an action target means one branch in `ActionExecutor.run()`, not a path per
-trigger. A LastDose log is an *item* (`targetType = LASTDOSE_LOG`), which is why every trigger type
+trigger. A **Magic Action** step is a reference to another item and re-enters that same
+`run()`, so the sequence engine knows nothing about any integration. Home Assistant is a
+`SmartHomeProvider`, not a target type, for exactly the same reason. A LastDose log is an *item* (`targetType = LASTDOSE_LOG`), which is why every trigger type
 could already fire one the day it was added. Quick Controls renders only what
 `SmartHomeProvider.getCapabilities()` reports.

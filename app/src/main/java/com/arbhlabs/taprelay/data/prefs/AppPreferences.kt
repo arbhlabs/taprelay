@@ -41,6 +41,10 @@ class AppPreferences(private val context: Context) {
     private val phoneHapticsKey = booleanPreferencesKey("phone_haptics")
     private val remoteAutoDimKey = booleanPreferencesKey("remote_auto_dim")
     private val aodDensityKey = stringPreferencesKey("aod_density")
+    private val aodFavouritesKey = stringPreferencesKey("aod_favourites")
+    private val aodShowClockKey = booleanPreferencesKey("aod_show_clock")
+    private val aodConfirmKey = booleanPreferencesKey("aod_confirm_actions")
+    private val aodMonochromeKey = booleanPreferencesKey("aod_monochrome")
 
     val onboardingComplete: Flow<Boolean> =
         context.appPrefs.data.map { it[onboardedKey] ?: false }
@@ -61,6 +65,46 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAodDensity(value: AodDensity) {
         context.appPrefs.edit { it[aodDensityKey] = value.name }
+    }
+
+    /**
+     * The items the always-on face offers, in the order they are shown. Stored as ids rather than
+     * a flag on the item, so reordering never rewrites the tags table and a deleted item simply
+     * stops appearing.
+     */
+    val aodFavourites: Flow<List<String>> =
+        context.appPrefs.data.map { prefs ->
+            prefs[aodFavouritesKey]?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
+        }
+
+    suspend fun setAodFavourites(ids: List<String>) {
+        context.appPrefs.edit { it[aodFavouritesKey] = ids.joinToString("\n") }
+    }
+
+    val aodShowClock: Flow<Boolean> =
+        context.appPrefs.data.map { it[aodShowClockKey] ?: true }
+
+    suspend fun setAodShowClock(value: Boolean) {
+        context.appPrefs.edit { it[aodShowClockKey] = value }
+    }
+
+    /**
+     * Whether a tap on the always-on face asks before it runs. On by default: the face is designed
+     * to sit propped up on a desk, where a sleeve brushing the glass must not turn the lights off.
+     */
+    val aodConfirmActions: Flow<Boolean> =
+        context.appPrefs.data.map { it[aodConfirmKey] ?: true }
+
+    suspend fun setAodConfirmActions(value: Boolean) {
+        context.appPrefs.edit { it[aodConfirmKey] = value }
+    }
+
+    /** Drops the accent on the always-on face for a pure white-on-black look. */
+    val aodMonochrome: Flow<Boolean> =
+        context.appPrefs.data.map { it[aodMonochromeKey] ?: false }
+
+    suspend fun setAodMonochrome(value: Boolean) {
+        context.appPrefs.edit { it[aodMonochromeKey] = value }
     }
 
     suspend fun setOnboardingComplete(value: Boolean) {

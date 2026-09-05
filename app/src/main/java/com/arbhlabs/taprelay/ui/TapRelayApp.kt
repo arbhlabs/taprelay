@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Nfc
@@ -54,6 +56,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.ActionType
@@ -63,13 +66,17 @@ import com.arbhlabs.taprelay.domain.model.ColorMath
 import com.arbhlabs.taprelay.domain.model.DeviceLabels
 import com.arbhlabs.taprelay.domain.model.DiscoveredDevice
 import com.arbhlabs.taprelay.domain.model.DiscoveredScene
+import com.arbhlabs.taprelay.domain.model.ItemLabels
 import com.arbhlabs.taprelay.domain.model.LightPresets
 import com.arbhlabs.taprelay.domain.model.powerIntent
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
+import com.arbhlabs.taprelay.domain.provider.HOME_ASSISTANT_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.SENSIBO_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
+import com.arbhlabs.taprelay.ui.actions.ActionsScreen
 import com.arbhlabs.taprelay.ui.lastdose.LastDoseScreen
+import com.arbhlabs.taprelay.ui.remote.AodSettingsScreen
 import com.arbhlabs.taprelay.ui.places.PlacesScreen
 import com.arbhlabs.taprelay.ui.quick.QuickControlsSheet
 import kotlin.math.roundToInt
@@ -103,6 +110,8 @@ fun TapRelayApp(vm: TapRelayViewModel) {
     var showControllers by rememberSaveable { mutableStateOf(false) }
     var showPlaces by rememberSaveable { mutableStateOf(false) }
     var showLastDose by rememberSaveable { mutableStateOf(false) }
+    var showActions by rememberSaveable { mutableStateOf(false) }
+    var showAodSettings by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -145,6 +154,15 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                 )
             }
 
+            showActions -> {
+                // The screen owns its own Back, including the editors nested inside it.
+                ActionsScreen(vm = vm, onDone = { showActions = false })
+            }
+
+            showAodSettings -> {
+                AodSettingsScreen(vm = vm, onDone = { showAodSettings = false })
+            }
+
             showPlaces -> {
                 BackHandler { showPlaces = false }
                 PlacesScreen(
@@ -162,12 +180,15 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     goveeConnected = ui.goveeConnected,
                     tuyaConnected = ui.tuyaConnected,
                     sensiboConnected = ui.sensiboConnected,
+                    haConnected = ui.haConnected,
                     isPro = ui.isPro,
                     nfcReady = nfcReady,
                     onOpenConnections = { showConnections = true },
                     onOpenControllers = { showControllers = true },
                     onOpenPlaces = { showPlaces = true },
                     onOpenLastDose = { showLastDose = true },
+                    onOpenActions = { showActions = true },
+                    onOpenAodSettings = { showAodSettings = true },
                     onOpenPro = { showProDialog = true },
                     onOpenDiagnostics = { showDiagnostics = true },
                     onOpenNfcStore = { showNfcStore = true }
@@ -313,6 +334,8 @@ private fun ConnectionsScreen(
     var tuyaRegion by rememberSaveable { mutableStateOf("us") }
     var tuyaUid by rememberSaveable { mutableStateOf("") }
     var sensiboKey by rememberSaveable { mutableStateOf("") }
+    var haUrl by rememberSaveable { mutableStateOf("") }
+    var haToken by rememberSaveable { mutableStateOf("") }
 
     var showGoogleInfo by remember { mutableStateOf(false) }
 
@@ -529,6 +552,75 @@ private fun ConnectionsScreen(
                 }
             }
 
+            // --- HOME ASSISTANT CARD ---
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Home Assistant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            val statusText = if (ui.haConnected) {
+                                "Connected • ${ui.haEntityCount} things"
+                            } else "Not connected"
+                            Text(
+                                statusText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (ui.haConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        if (ui.haConnected) {
+                            FilledTonalButton(onClick = { vm.disconnectHomeAssistant() }) { Text("Disconnect") }
+                        }
+                    }
+
+                    if (!ui.haConnected) {
+                        Text(
+                            "Bring in everything your own Home Assistant already controls — Zigbee, " +
+                                "Z-Wave, Matter, anything. TapRelay talks to it directly from this " +
+                                "phone; nothing goes through us.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = haUrl,
+                            onValueChange = { haUrl = it; vm.resetConnectState() },
+                            label = { Text("Address") },
+                            placeholder = { Text("homeassistant.local:8123") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = haToken,
+                            onValueChange = { haToken = it; vm.resetConnectState() },
+                            label = { Text("Access token") },
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            "In Home Assistant open your profile, scroll to Long-lived access " +
+                                "tokens and create one for TapRelay. It is encrypted on this phone " +
+                                "and never leaves it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = { vm.connectHomeAssistant(haUrl, haToken) },
+                            enabled = state !is TapRelayViewModel.ConnectState.Validating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (state is TapRelayViewModel.ConnectState.Validating) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Connect Home Assistant")
+                            }
+                        }
+                    }
+                }
+            }
+
             // --- GOOGLE HOME CARD ---
             ElevatedCard(
                 shape = RoundedCornerShape(16.dp),
@@ -578,12 +670,15 @@ private fun HomeScreen(
     goveeConnected: Boolean,
     tuyaConnected: Boolean,
     sensiboConnected: Boolean,
+    haConnected: Boolean,
     isPro: Boolean,
     nfcReady: Boolean,
     onOpenConnections: () -> Unit,
     onOpenControllers: () -> Unit,
     onOpenPlaces: () -> Unit,
     onOpenLastDose: () -> Unit,
+    onOpenActions: () -> Unit,
+    onOpenAodSettings: () -> Unit,
     onOpenPro: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenNfcStore: () -> Unit
@@ -592,9 +687,10 @@ private fun HomeScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
 
-    val anyConnected = goveeConnected || tuyaConnected || sensiboConnected
+    val anyConnected = goveeConnected || tuyaConnected || sensiboConnected || haConnected
     val controllers by vm.connectedControllers.collectAsState()
     val controllerMappings by vm.controllerMappings.collectAsState()
+    val running by vm.runningItems.collectAsState()
 
     Scaffold(
         topBar = {
@@ -608,14 +704,22 @@ private fun HomeScreen(
                     AssistChip(
                         onClick = onOpenConnections,
                         label = {
+                            val parts = buildList {
+                                if (goveeConnected) add("Govee")
+                                if (tuyaConnected) add("Smart Life")
+                                if (sensiboConnected) add("Sensibo")
+                                if (haConnected) add("Home Assistant")
+                            }
                             Text(
-                                if (anyConnected) {
-                                    val parts = mutableListOf<String>()
-                                    if (goveeConnected) parts.add("Govee")
-                                    if (tuyaConnected) parts.add("Smart Life")
-                                    if (sensiboConnected) parts.add("Sensibo")
-                                    parts.joinToString(" + ")
-                                } else "Not connected"
+                                // Naming them only reads well while they fit. Past two it becomes
+                                // a wrapping sentence next to the title, so it becomes a count.
+                                when {
+                                    parts.isEmpty() -> "Not connected"
+                                    parts.size <= 2 -> parts.joinToString(" + ")
+                                    else -> "${parts.size} connected"
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         },
                         leadingIcon = {
@@ -632,6 +736,11 @@ private fun HomeScreen(
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
+                            text = { Text("Magic Actions") },
+                            leadingIcon = { Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary) },
+                            onClick = { menuOpen = false; onOpenActions() }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Controllers & Remotes") },
                             leadingIcon = { Icon(Icons.Default.SportsEsports, null, tint = MaterialTheme.colorScheme.primary) },
                             onClick = { menuOpen = false; onOpenControllers() }
@@ -640,6 +749,11 @@ private fun HomeScreen(
                             text = { Text("LastDose Logs") },
                             leadingIcon = { Icon(Icons.Default.Bolt, null) },
                             onClick = { menuOpen = false; onOpenLastDose() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Always-on face") },
+                            leadingIcon = { Icon(Icons.Default.Smartphone, null) },
+                            onClick = { menuOpen = false; onOpenAodSettings() }
                         )
                         DropdownMenuItem(
                             text = { Text("Places & Routines") },
@@ -669,6 +783,7 @@ private fun HomeScreen(
                         )
                         DropdownMenuItem(
                             text = { Text("About TapRelay") },
+                            leadingIcon = { Icon(Icons.Default.Info, null) },
                             onClick = { menuOpen = false; showAbout = true }
                         )
                     }
@@ -755,6 +870,7 @@ private fun HomeScreen(
                     )
                 }
                 tags.forEach { tag ->
+                    val busy = running.contains(tag.tagId)
                     ElevatedCard(
                         onClick = { detail = tag },
                         shape = RoundedCornerShape(20.dp),
@@ -766,10 +882,18 @@ private fun HomeScreen(
                         ) {
                             Box(
                                 Modifier.size(40.dp).clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                                    .background(
+                                        if (busy) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(iconFor(tag.iconKey), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                                Icon(
+                                    iconFor(tag.iconKey), null,
+                                    tint = if (busy) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
                             Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
@@ -778,19 +902,27 @@ private fun HomeScreen(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                val providerLabel = when (tag.providerId) {
-                                    TUYA_PROVIDER_ID -> "Smart Life"
-                                    SENSIBO_PROVIDER_ID -> "Sensibo"
-                                    else -> "Govee"
-                                }
-                                val actLabel = tagActionSummary(tag)
                                 Text(
-                                    "$providerLabel • $actLabel" + if (!tag.enabled) " • off" else "",
+                                    // The row the finger landed on says so itself. A cloud toggle
+                                    // has to read the device before it can invert it, and without
+                                    // this the card sits looking untouched for the whole round trip.
+                                    if (busy) "Working…" else
+                                        ItemLabels.detailed(tag, tagActionSummary(tag)) +
+                                            if (!tag.enabled) " • off" else "",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (busy) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            TextButton(onClick = { vm.testTag(tag) }) { Text("Test") }
+                            if (busy) {
+                                CircularProgressIndicator(
+                                    Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(12.dp))
+                            } else {
+                                TextButton(onClick = { vm.testTag(tag) }) { Text("Test") }
+                            }
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowRight, null,
                                 tint = MaterialTheme.colorScheme.outline

@@ -5,12 +5,15 @@ import androidx.room.Room
 import com.arbhlabs.taprelay.data.local.AppDatabase
 import com.arbhlabs.taprelay.data.prefs.AppPreferences
 import com.arbhlabs.taprelay.data.remote.govee.GoveeApiClient
+import com.arbhlabs.taprelay.data.remote.ha.HomeAssistantApiClient
 import com.arbhlabs.taprelay.data.remote.sensibo.SensiboApiClient
 import com.arbhlabs.taprelay.data.secure.SecureKeyStorage
 import com.arbhlabs.taprelay.data.secure.TinkAeadManager
 import com.arbhlabs.taprelay.data.remote.tuya.TuyaApiClient
 import com.arbhlabs.taprelay.domain.provider.GOVEE_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.GoveeCloudProvider
+import com.arbhlabs.taprelay.domain.provider.HOME_ASSISTANT_PROVIDER_ID
+import com.arbhlabs.taprelay.domain.provider.HomeAssistantProvider
 import com.arbhlabs.taprelay.domain.provider.SENSIBO_PROVIDER_ID
 import com.arbhlabs.taprelay.domain.provider.SensiboProvider
 import com.arbhlabs.taprelay.domain.provider.SmartHomeProvider
@@ -38,7 +41,8 @@ class ServiceLocator(context: Context) {
         AppDatabase.MIGRATION_6_7,
         AppDatabase.MIGRATION_7_8,
         AppDatabase.MIGRATION_8_9,
-        AppDatabase.MIGRATION_9_10
+        AppDatabase.MIGRATION_9_10,
+        AppDatabase.MIGRATION_10_11
     )
      // No destructive fallback: a missing migration must fail loudly rather than
      // silently deleting every tag mapping the owner has set up.
@@ -63,11 +67,21 @@ class ServiceLocator(context: Context) {
     private val sensiboApi = SensiboApiClient()
     val sensiboProvider = SensiboProvider(sensiboApi, secureKeyStorage)
 
+    private val homeAssistantApi = HomeAssistantApiClient()
+    val homeAssistantProvider = HomeAssistantProvider(homeAssistantApi, secureKeyStorage)
+
+    // Home Assistant is a provider, not a feature: registering it here is the entire integration
+    // as far as the wizard, Quick Controls, Magic Actions, the always-on face and widgets know.
     val providers: Map<String, SmartHomeProvider> = mapOf(
         GOVEE_PROVIDER_ID to goveeProvider,
         TUYA_PROVIDER_ID to tuyaProvider,
-        SENSIBO_PROVIDER_ID to sensiboProvider
+        SENSIBO_PROVIDER_ID to sensiboProvider,
+        HOME_ASSISTANT_PROVIDER_ID to homeAssistantProvider
     )
+
+    val webhookClient = com.arbhlabs.taprelay.execution.webhook.WebhookClient()
+    val appLauncher = com.arbhlabs.taprelay.execution.phone.AppLauncher(appContext)
+    val phoneController = com.arbhlabs.taprelay.execution.phone.PhoneController(appContext)
 
     val haptics = HapticsManager(appContext)
 
@@ -80,7 +94,11 @@ class ServiceLocator(context: Context) {
         haptics = haptics,
         tapLogDao = tapLogDao,
         entitlements = entitlementRepository,
-        lastDose = lastDoseClient
+        lastDose = lastDoseClient,
+        webhooks = webhookClient,
+        secureStorage = secureKeyStorage,
+        launcher = appLauncher,
+        phone = phoneController
     )
 
     /** trigger -> item -> activation mode -> execute / open item / Quick Controls. */

@@ -2,4 +2,14 @@
 <resources>
     <string name="app_name">TapRelay</string>
     <string name="remote_mode_tile">TapRelay Remote</string>
+
+    <!-- Widgets -->
+    <string name="widget_default_name">TapRelay</string>
+    <string name="widget_default_detail">Tap to set up</string>
+    <string name="widget_remote_title">TAPRELAY</string>
+    <string name="widget_remote_ready">Ready</string>
+    <string name="widget_key_name">Action Key</string>
+    <string name="widget_remote_name">TapRelay Remote</string>
+    <string name="widget_key_description">One action, one tap. Point it at a light, a scene or a Magic Action.</string>
+    <string name="widget_remote_description">Up to six of your actions on the home screen.</string>
 </resources>

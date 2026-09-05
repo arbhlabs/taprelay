@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Material You. These tokens are sampled from the user's wallpaper by the system, and Android
+    picks the light or dark set for us based on the launcher's theme - which is why there is no
+    values-night-v31: the system colours already carry the day/night distinction.
+-->
+<resources>
+    <color name="widget_surface">@android:color/system_neutral1_50</color>
+    <color name="widget_tile">@android:color/system_accent2_100</color>
+    <color name="widget_tile_active">@android:color/system_accent1_100</color>
+    <color name="widget_accent">@android:color/system_accent1_600</color>
+    <color name="widget_on_accent">@android:color/system_accent1_0</color>
+    <color name="widget_text">@android:color/system_neutral1_900</color>
+    <color name="widget_text_dim">@android:color/system_neutral2_700</color>
+    <color name="widget_error">#FFB3261E</color>
+</resources>

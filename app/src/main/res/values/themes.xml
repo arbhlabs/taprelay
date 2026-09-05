@@ -13,4 +13,14 @@
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
+
+    <!--
+        Widgets are inflated inside the launcher's process, so they get no theme of ours unless a
+        layout asks for one. This carries nothing but the text appearance defaults, so a launcher
+        with an unusual theme cannot leave TapRelay's widget unreadable.
+    -->
+    <style name="Theme.TapRelayWidget" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:textColorPrimary">@color/widget_text</item>
+        <item name="android:textColorSecondary">@color/widget_text_dim</item>
+    </style>
 </resources>

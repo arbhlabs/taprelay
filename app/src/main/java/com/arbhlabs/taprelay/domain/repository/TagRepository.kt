@@ -8,6 +8,8 @@ class TagRepository(private val tagDao: TagDao) {
 
     fun getAllTags(): Flow<List<TagEntity>> = tagDao.getAllTags()
 
+    suspend fun getTagsOnce(): List<TagEntity> = tagDao.getTagsOnce()
+
     suspend fun getTagById(tagId: String): TagEntity? = tagDao.getTagById(tagId)
 
     suspend fun upsert(tag: TagEntity) = tagDao.insertTag(tag)

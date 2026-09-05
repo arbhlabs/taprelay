@@ -14,6 +14,13 @@ import com.arbhlabs.taprelay.data.local.entity.PlaceTriggerEntity
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
 
+/**
+ * The schema version, kept as a constant so the migration chain can be asserted against the same
+ * number the annotation uses. Bumping one without the other is exactly the mistake that ships an
+ * app which cannot open an existing owner's tag database.
+ */
+const val TAPRELAY_SCHEMA_VERSION = 11
+
 @Database(
     entities = [
         TagEntity::class,
@@ -21,7 +28,7 @@ import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
         ControllerMappingEntity::class,
         PlaceTriggerEntity::class
     ],
-    version = 10,
+    version = TAPRELAY_SCHEMA_VERSION,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -137,6 +144,21 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE tags ADD COLUMN lastDoseItemName TEXT")
                 db.execSQL("ALTER TABLE tags ADD COLUMN lastDoseAmount TEXT")
                 db.execSQL("ALTER TABLE tags ADD COLUMN lastDoseUnit TEXT")
+            }
+        }
+
+        /**
+         * 0.2.1: web requests and Magic Actions. Every column is nullable and no existing column
+         * changes, so a lamp, a scene and a LastDose log saved by 0.1.5 read back identically.
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tags ADD COLUMN webhookUrl TEXT")
+                db.execSQL("ALTER TABLE tags ADD COLUMN webhookMethod TEXT")
+                db.execSQL("ALTER TABLE tags ADD COLUMN webhookHeadersJson TEXT")
+                db.execSQL("ALTER TABLE tags ADD COLUMN webhookBody TEXT")
+                db.execSQL("ALTER TABLE tags ADD COLUMN webhookSecretHeader TEXT")
+                db.execSQL("ALTER TABLE tags ADD COLUMN actionChainJson TEXT")
             }
         }
 

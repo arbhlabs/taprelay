@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Action Key stretched tall (2x2 and up). The extra height goes into the name rather than into
+    padding, so a resized widget looks deliberate instead of like a small one that grew.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_surface"
+    android:padding="18dp"
+    android:theme="@style/Theme.TapRelayWidget">
+
+    <ImageView
+        android:id="@+id/key_icon"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:src="@drawable/ic_w_scene"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/key_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="@color/widget_text"
+        android:text="@string/widget_default_name" />
+
+    <TextView
+        android:id="@+id/key_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="13sp"
+        android:textColor="@color/widget_text_dim"
+        android:text="@string/widget_default_detail" />
+
+    <ImageView
+        android:id="@+id/key_status"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginTop="10dp"
+        android:visibility="gone"
+        android:src="@drawable/ic_w_check"
+        android:contentDescription="@null" />
+</LinearLayout>

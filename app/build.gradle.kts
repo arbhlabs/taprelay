@@ -23,8 +23,8 @@ android {
         applicationId = "com.arbhlabs.taprelay"
         minSdk = 30
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.1.5"
+        versionCode = 17
+        versionName = "0.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }

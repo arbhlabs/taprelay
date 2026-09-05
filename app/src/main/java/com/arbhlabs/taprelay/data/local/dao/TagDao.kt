@@ -9,6 +9,10 @@ interface TagDao {
     @Query("SELECT * FROM tags ORDER BY createdAt DESC")
     fun getAllTags(): Flow<List<TagEntity>>
 
+    /** A single read rather than a flow, for the widget path where nothing is observing. */
+    @Query("SELECT * FROM tags ORDER BY createdAt DESC")
+    suspend fun getTagsOnce(): List<TagEntity>
+
     @Query("SELECT * FROM tags WHERE tagId = :tagId LIMIT 1")
     suspend fun getTagById(tagId: String): TagEntity?
 

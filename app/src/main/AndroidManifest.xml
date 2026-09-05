@@ -110,6 +110,49 @@
             </intent-filter>
         </activity>
 
+        <!--
+            Home-screen widgets. No updatePeriodMillis: a widget is redrawn when something
+            happened to it, never on a timer.
+        -->
+        <receiver
+            android:name=".widget.ActionKeyWidget"
+            android:exported="false"
+            android:label="@string/widget_key_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_key_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.RemoteWidget"
+            android:exported="false"
+            android:label="@string/widget_remote_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_remote_info" />
+        </receiver>
+
+        <!-- Not exported: only TapRelay's own PendingIntents may run an owner's action. -->
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="false" />
+
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TapRelay">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".location.GeofenceReceiver"
             android:exported="false" />

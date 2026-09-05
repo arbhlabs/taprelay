@@ -1,9 +1,46 @@
-# TapRelay — site publish record
+# TapRelay - site publish record
 
 TapRelay is published as a **private alpha** on arbhlabs.com through the standard ARBH Labs
 release pipeline. The disclaimer copy below is required on the download page and is live there.
 
-## Current release — v0.1.4 (2026-09-04)
+## Current release - v0.2.1 (2026-09-05)
+
+- `TapRelay-v0.2.1.apk` - signed release, SHA-256
+  `8ec11701c80201a0ffe38a2b995c05d8335799ee18d605564c3d62c872d079c4`, 7,982,103 bytes,
+  versionCode 17, Room schema **11**
+- `TapRelay-v0.2.1.apk.sha256`, `../docs/QA-v0.2.1.md`, `../docs/RESEARCH_0.2.1.md`
+- Magic Actions (one trigger runs a sequence of the owner's own actions, with pauses and partial-
+  failure reporting); Home Assistant as a first-class `SmartHomeProvider` over the documented REST
+  API; home-screen widgets (Action Key + Remote); a rebuilt always-on face driven by favourites;
+  and three new target types (open app/link, Do Not Disturb, web request).
+- Signed with the ARBH Labs TapRelay release key; certificate SHA-256
+  `7ed03578928d3b8eaec35cf064154bee4d48f528b0021dd3dcd9f3fde73ba808`, which is the digest
+  LastDose's `ExternalActionProvider` pins - so cross-app logging works with this build.
+- **Still free and still paywall-free.** The entitlement boundary exists in code and
+  `canAccess()` returns `true` for everything. See `../docs/RESEARCH_0.2.1.md` section 5.
+
+Live URLs (all serve the exact bytes above, verified by download):
+- https://arbhlabs.com/taprelay/
+- https://arbhlabs.com/downloads/TapRelay-0.2.1.apk
+- https://arbhlabs.com/downloads/TapRelay.apk
+- https://arbhlabs.com/downloads/TapRelay-latest.apk
+
+0.1.5, 0.1.4, 0.1.2 and 0.1.0 all still resolve unchanged (HTTP 200, verified after this deploy).
+The download page's release history gained a 0.1.5 card, which had been published to R2 but never
+added to the page.
+
+R2 objects in `arbh-releases`:
+- `taprelay/releases/0.2.1/TapRelay-0.2.1.apk` (immutable)
+- `taprelay/latest/TapRelay.apk`, `taprelay/latest/TapRelay-latest.apk` (aliases)
+
+## Previous release - v0.1.5 (2026-09-04)
+
+- `TapRelay-v0.1.5.apk` - signed release, SHA-256
+  `fb72d9f5b6700e9604ece65badfd04451d1802b80bafff6668a0059f930bf4f3`, 7,747,955 bytes,
+  versionCode 16, Room schema 10
+- Fixes the edge swipe and system Back leaving TapRelay from a child screen.
+
+## Previous release — v0.1.4 (2026-09-04)
 
 - `TapRelay-v0.1.4.apk` — signed release, SHA-256
   `53c3ff7f58f07467f82a4df8b629441e08b29dafbe4f733a14274b1b10754ba1`, 7,747,951 bytes,

@@ -280,28 +280,8 @@ fun ControllersScreen(
                             checked = autoDim,
                             onCheckedChange = { vm.setRemoteAutoDim(it) }
                         )
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                            Text(
-                                "Remote Mode spacing",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "How much room the always-on face gives itself.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                AodDensity.entries.forEach { option ->
-                                    FilterChip(
-                                        selected = density == option,
-                                        onClick = { vm.setAodDensity(option) },
-                                        label = { Text(option.label) }
-                                    )
-                                }
-                            }
-                        }
+                        // Everything else about the always-on face lives on its own screen, so
+                        // this one has a single home rather than two half-settings pages.
                         PreferenceRow(
                             title = "Keep screen awake in the app",
                             hint = "For a docked phone, without leaving the main screen.",

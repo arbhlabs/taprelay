@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -105,6 +106,8 @@ data class HomeUiState(
     val tuyaSceneCount: Int = 0,
     val sensiboConnected: Boolean = false,
     val sensiboDeviceCount: Int = 0,
+    val haConnected: Boolean = false,
+    val haEntityCount: Int = 0,
     val isPro: Boolean = false,
     val isTrialActive: Boolean = false,
     val trialDaysRemaining: Int = 0,
@@ -122,6 +125,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     private val tuyaSceneCount = MutableStateFlow(0)
     private val sensiboConnected = MutableStateFlow(false)
     private val sensiboDeviceCount = MutableStateFlow(0)
+    private val haConnected = MutableStateFlow(false)
+    private val haEntityCount = MutableStateFlow(0)
 
     private data class Connections(
         val goveeConnected: Boolean,
@@ -130,7 +135,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         val tuyaDeviceCount: Int,
         val tuyaSceneCount: Int,
         val sensiboConnected: Boolean,
-        val sensiboDeviceCount: Int
+        val sensiboDeviceCount: Int,
+        val haConnected: Boolean,
+        val haEntityCount: Int
     )
 
     val isPro: StateFlow<Boolean> = services.entitlementRepository.isPro
@@ -138,11 +145,15 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     val tapLogs: Flow<List<TapLogEntity>> = services.tapLogDao.getRecentLogs()
 
+    /** Which items are executing, so the surface the finger touched can say so immediately. */
+    val runningItems: StateFlow<Set<String>> = services.actionExecutor.running
+
     private val goveeState = combine(goveeConnected, goveeDeviceCount) { c, d -> c to d }
     private val tuyaState = combine(tuyaConnected, tuyaDeviceCount, tuyaSceneCount) { c, d, s -> Triple(c, d, s) }
     private val sensiboState = combine(sensiboConnected, sensiboDeviceCount) { c, d -> c to d }
+    private val haState = combine(haConnected, haEntityCount) { c, d -> c to d }
 
-    private val connections = combine(goveeState, tuyaState, sensiboState) { g, t, s ->
+    private val connections = combine(goveeState, tuyaState, sensiboState, haState) { g, t, s, h ->
         Connections(
             goveeConnected = g.first,
             goveeDeviceCount = g.second,
@@ -150,7 +161,9 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             tuyaDeviceCount = t.second,
             tuyaSceneCount = t.third,
             sensiboConnected = s.first,
-            sensiboDeviceCount = s.second
+            sensiboDeviceCount = s.second,
+            haConnected = h.first,
+            haEntityCount = h.second
         )
     }
 
@@ -177,6 +190,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             tuyaSceneCount = c.tuyaSceneCount,
             sensiboConnected = c.sensiboConnected,
             sensiboDeviceCount = c.sensiboDeviceCount,
+            haConnected = c.haConnected,
+            haEntityCount = c.haEntityCount,
             isPro = pro,
             isTrialActive = trialActive,
             trialDaysRemaining = daysRemaining,
@@ -218,7 +233,15 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         refreshConnections()
     }
 
-    fun refreshConnections() = viewModelScope.launch {
+    /**
+     * Reads which providers are set up.
+     *
+     * Every one of these decrypts a credential through Tink, which reaches the Android Keystore
+     * over hardware IPC. On the main thread that measured 53-61ms during launch and was most of
+     * TapRelay's cold-start jank, so the whole sweep runs on IO and only the resulting flags come
+     * back.
+     */
+    fun refreshConnections() = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
         val gConn = services.goveeProvider.isConnected()
         if (gConn) {
             runCatching {
@@ -254,6 +277,18 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
             sensiboDeviceCount.value = 0
         }
         sensiboConnected.value = sConn
+
+        val hConn = services.homeAssistantProvider.isConnected()
+        if (hConn) {
+            runCatching {
+                val entities = services.homeAssistantProvider.discoverDevices()
+                val scenes = services.homeAssistantProvider.discoverScenes()
+                haEntityCount.value = entities.size + scenes.size
+            }
+        } else {
+            haEntityCount.value = 0
+        }
+        haConnected.value = hConn
     }
 
     // ---- Onboarding / provider ----
@@ -336,6 +371,50 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             _connectState.value = ConnectState.Error("Couldn't reach Sensibo. Check your connection.")
         }
+    }
+
+    /**
+     * Connects the owner's own Home Assistant. The address is normalised first, so pasting the
+     * URL out of a browser tab - path and all - works the way somebody expects it to.
+     */
+    fun connectHomeAssistant(baseUrl: String, token: String) = viewModelScope.launch {
+        val url = com.arbhlabs.taprelay.data.remote.ha.HomeAssistantApiClient.normalizeBaseUrl(baseUrl)
+        if (url.isBlank()) {
+            _connectState.value = ConnectState.Error("Enter your Home Assistant address to continue.")
+            return@launch
+        }
+        if (token.isBlank()) {
+            _connectState.value = ConnectState.Error("Paste the access token you created in Home Assistant.")
+            return@launch
+        }
+        _connectState.value = ConnectState.Validating
+        try {
+            if (!services.homeAssistantProvider.testConnection(url, token)) {
+                _connectState.value = ConnectState.Error(
+                    "Couldn't reach Home Assistant at that address. Check it's running and that " +
+                        "your phone is on the same network."
+                )
+                return@launch
+            }
+            services.secureKeyStorage.saveHomeAssistantCredentials(
+                com.arbhlabs.taprelay.data.secure.HomeAssistantCredentials(url, token.trim())
+            )
+            val entities = services.homeAssistantProvider.discoverDevices()
+            val scenes = services.homeAssistantProvider.discoverScenes()
+            haConnected.value = true
+            haEntityCount.value = entities.size + scenes.size
+            _connectState.value = ConnectState.Success("Home Assistant", entities.size + scenes.size)
+        } catch (e: TapException) {
+            _connectState.value = ConnectState.Error(e.error.message)
+        } catch (e: Exception) {
+            _connectState.value = ConnectState.Error("Couldn't reach Home Assistant. Check the address and try again.")
+        }
+    }
+
+    fun disconnectHomeAssistant() = viewModelScope.launch {
+        services.secureKeyStorage.clearHomeAssistantCredentials()
+        haConnected.value = false
+        haEntityCount.value = 0
     }
 
     fun resetConnectState() { _connectState.value = ConnectState.Idle }
@@ -982,6 +1061,197 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteLastDoseItem(tag: TagEntity) = viewModelScope.launch {
         services.tagRepository.delete(tag)
     }
+
+    // ---- Magic Actions and the other non-device items -------------------------------------
+
+    /**
+     * Every item a Magic Action step can point at.
+     *
+     * Deliberately not filtered by kind beyond excluding Magic Actions themselves: a step can run
+     * a lamp, a scene, a Home Assistant entity, a LastDose log, a web request, an app or Do Not
+     * Disturb, because all of those are the same thing to the executor.
+     */
+    val stepCandidates: StateFlow<List<TagEntity>> = ui
+        .map { state -> state.tags.filterNot { it.isMagicAction } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun saveMagicAction(
+        existing: TagEntity?,
+        name: String,
+        iconKey: String,
+        steps: List<com.arbhlabs.taprelay.domain.model.ActionStep>,
+        activationMode: ActivationMode = ActivationMode.EXECUTE
+    ) = viewModelScope.launch {
+        val entity = (existing ?: newItem(prefix = "magic", name = name, iconKey = iconKey)).copy(
+            friendlyName = name.ifBlank { "Magic Action" },
+            iconKey = iconKey,
+            targetType = TargetType.MAGIC_ACTION,
+            actionChainJson = com.arbhlabs.taprelay.domain.model.ActionStep.encode(steps),
+            activationMode = activationMode
+        )
+        persist(existing, entity)
+    }
+
+    /**
+     * Saves a web request. The credential never enters the tags row: only the header's *name* is
+     * stored there, and the value goes into encrypted storage keyed by this item.
+     */
+    fun saveWebhookItem(
+        existing: TagEntity?,
+        name: String,
+        iconKey: String,
+        url: String,
+        method: com.arbhlabs.taprelay.execution.webhook.WebhookMethod,
+        body: String,
+        secretHeader: String,
+        secretValue: String
+    ) = viewModelScope.launch {
+        val trimmedHeader = secretHeader.trim()
+        val hasSecret = trimmedHeader.isNotBlank() && secretValue.isNotBlank()
+        val entity = (existing ?: newItem(prefix = "web", name = name, iconKey = iconKey)).copy(
+            friendlyName = name.ifBlank { "Web request" },
+            iconKey = iconKey,
+            targetType = TargetType.WEBHOOK,
+            webhookUrl = url.trim(),
+            webhookMethod = method.name,
+            webhookBody = body.trim().ifBlank { null },
+            webhookSecretHeader = trimmedHeader.ifBlank { null }
+        )
+        persist(existing, entity)
+        if (hasSecret) {
+            services.secureKeyStorage.saveWebhookSecret(entity.tagId, secretValue.trim())
+        } else if (trimmedHeader.isBlank()) {
+            services.secureKeyStorage.clearWebhookSecret(entity.tagId)
+        }
+    }
+
+    fun saveLaunchItem(
+        existing: TagEntity?,
+        name: String,
+        iconKey: String,
+        kind: String,
+        target: String
+    ) = viewModelScope.launch {
+        val entity = (existing ?: newItem(prefix = "open", name = name, iconKey = iconKey)).copy(
+            friendlyName = name.ifBlank { "Open" },
+            iconKey = iconKey,
+            targetType = TargetType.LAUNCH,
+            deviceId = target.trim(),
+            deviceSku = kind
+        )
+        persist(existing, entity)
+    }
+
+    fun savePhoneItem(
+        existing: TagEntity?,
+        name: String,
+        iconKey: String,
+        phoneAction: String
+    ) = viewModelScope.launch {
+        val entity = (existing ?: newItem(prefix = "phone", name = name, iconKey = iconKey)).copy(
+            friendlyName = name.ifBlank { com.arbhlabs.taprelay.domain.model.PhoneAction.label(phoneAction) },
+            iconKey = iconKey,
+            targetType = TargetType.PHONE,
+            deviceId = phoneAction
+        )
+        persist(existing, entity)
+    }
+
+    /** Deletes any item, and the encrypted credential that belonged to it. */
+    fun deleteItem(tag: TagEntity) = viewModelScope.launch {
+        services.tagRepository.delete(tag)
+        if (tag.isWebhook) services.secureKeyStorage.clearWebhookSecret(tag.tagId)
+        // A deleted item leaves any Magic Action that pointed at it: the step reports it by name
+        // rather than the sequence silently getting shorter.
+        pruneAodFavourites(tag.tagId)
+    }
+
+    private fun newItem(prefix: String, name: String, iconKey: String) = TagEntity(
+        tagId = "$prefix-" + java.util.UUID.randomUUID().toString(),
+        friendlyName = name,
+        iconKey = iconKey,
+        providerId = prefix,
+        deviceId = "",
+        deviceSku = "",
+        actionType = ActionType.TURN_ON
+    )
+
+    private suspend fun persist(existing: TagEntity?, entity: TagEntity) {
+        if (existing == null) services.tagRepository.upsert(entity) else services.tagRepository.update(entity)
+        services.haptics.vibrateSuccess()
+    }
+
+    /** Reads the stored credential so the editor can show that one exists without revealing it. */
+    suspend fun hasWebhookSecret(tagId: String): Boolean =
+        services.secureKeyStorage.getWebhookSecret(tagId).first() != null
+
+    // ---- The always-on face's favourites ---------------------------------------------------
+
+    val aodFavourites: StateFlow<List<String>> = services.preferences.aodFavourites
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val aodShowClock: StateFlow<Boolean> = services.preferences.aodShowClock
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val aodConfirmActions: StateFlow<Boolean> = services.preferences.aodConfirmActions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val aodMonochrome: StateFlow<Boolean> = services.preferences.aodMonochrome
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun setAodFavourites(ids: List<String>) = viewModelScope.launch {
+        services.preferences.setAodFavourites(ids)
+    }
+
+    fun toggleAodFavourite(tagId: String) = viewModelScope.launch {
+        val current = services.preferences.aodFavourites.first()
+        val next = if (current.contains(tagId)) current - tagId else current + tagId
+        services.preferences.setAodFavourites(next)
+    }
+
+    fun moveAodFavourite(tagId: String, delta: Int) = viewModelScope.launch {
+        val current = services.preferences.aodFavourites.first().toMutableList()
+        val index = current.indexOf(tagId)
+        if (index < 0) return@launch
+        val target = (index + delta).coerceIn(0, current.size - 1)
+        if (target == index) return@launch
+        current.removeAt(index)
+        current.add(target, tagId)
+        services.preferences.setAodFavourites(current)
+    }
+
+    private suspend fun pruneAodFavourites(removedTagId: String) {
+        val current = services.preferences.aodFavourites.first()
+        if (current.contains(removedTagId)) {
+            services.preferences.setAodFavourites(current - removedTagId)
+        }
+    }
+
+    fun setAodShowClock(value: Boolean) = viewModelScope.launch {
+        services.preferences.setAodShowClock(value)
+    }
+
+    fun setAodConfirmActions(value: Boolean) = viewModelScope.launch {
+        services.preferences.setAodConfirmActions(value)
+    }
+
+    fun setAodMonochrome(value: Boolean) = viewModelScope.launch {
+        services.preferences.setAodMonochrome(value)
+    }
+
+    // ---- Phone-side capabilities -----------------------------------------------------------
+
+    val installedApps: StateFlow<List<com.arbhlabs.taprelay.execution.phone.LaunchableApp>?> =
+        MutableStateFlow<List<com.arbhlabs.taprelay.execution.phone.LaunchableApp>?>(null)
+            .also { flow ->
+                viewModelScope.launch {
+                    // Reads the package manager, which is slow enough to matter on a cold open.
+                    flow.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        services.appLauncher.launchableApps()
+                    }
+                }
+            }.asStateFlow()
+
+    fun hasDndAccess(): Boolean = services.phoneController.hasDndAccess
+
+    fun dndAccessIntent() = services.phoneController.dndAccessIntent()
 
     /** Fires an item from the app so a mapping can be proved without a controller or a tag. */
     fun testItem(tag: TagEntity) {

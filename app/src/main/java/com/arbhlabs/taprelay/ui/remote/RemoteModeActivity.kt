@@ -11,6 +11,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -27,26 +28,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,25 +63,17 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.arbhlabs.taprelay.TapRelayApplication
 import com.arbhlabs.taprelay.controller.ControllerManager
-import com.arbhlabs.taprelay.data.local.entity.ControllerMappingEntity
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.data.prefs.AodDensity
 import com.arbhlabs.taprelay.di.ServiceLocator
-import com.arbhlabs.taprelay.domain.model.ActivationMode
 import com.arbhlabs.taprelay.execution.TapFeedback
 import com.arbhlabs.taprelay.trigger.ActivationPresenter
+import com.arbhlabs.taprelay.trigger.TriggerSource
 import com.arbhlabs.taprelay.ui.MainActivity
-import com.arbhlabs.taprelay.ui.components.TapRelayPill
-import com.arbhlabs.taprelay.ui.iconFor
 import com.arbhlabs.taprelay.ui.quick.QuickControlsContent
 import com.arbhlabs.taprelay.ui.quick.QuickControlsSession
 import com.arbhlabs.taprelay.ui.theme.TapRelayTheme
@@ -96,23 +83,28 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
- * Remote Mode: an always-on remote face for TapRelay.
+ * The always-on face: TapRelay as a physical remote that happens to live on a phone.
  *
- * Android will not let any app read a game controller in the background. Controller input is
- * delivered by `InputDispatcher` only to the focused window, so a service has nothing to listen
- * with, `MediaSession` only ever sees media keys, and a non-focusable overlay receives nothing.
- * The two ways round that — an AccessibilityService, or an overlay that steals focus from every
- * other app — are a Play policy violation and a broken phone respectively, so TapRelay does
- * neither.
+ * Two jobs, and the design follows from both.
  *
- * Instead this screen is built to be left on for hours: it shows over the lock screen, holds the
- * display awake, then dozes to the panel's own dimmest backlight, asks the compositor for its
- * lowest frame rate, redraws once a minute, and drifts within safe bounds so nothing burns in.
- * Waking is a deliberate slide, never a stray tap. One press on the Quick Settings tile gets here
- * from anywhere without opening the app.
+ * **It is the only place a game controller can be heard.** Android delivers controller input
+ * through `InputDispatcher` to the focused window only, so a service has nothing to listen with,
+ * `MediaSession` sees media keys alone, and a non-focusable overlay receives nothing. The two ways
+ * round that - an AccessibilityService, or an overlay that steals focus from every other app - are
+ * a Play policy violation and a broken phone respectively. So this is a real, focused activity
+ * that shows over the lock screen, and that is not a workaround: it is the compliant answer.
+ *
+ * **It is meant to be left on for hours**, propped up on a desk. So it holds the display awake,
+ * then dozes to the panel's own dimmest backlight, asks the compositor for its lowest frame rate,
+ * redraws once a minute instead of once a second, hides everything but the clock while dozing,
+ * and drifts within safe bounds so nothing burns in. Waking is a deliberate slide, never a stray
+ * tap, and running a favourite takes two taps unless the owner has said otherwise - a sleeve
+ * brushing the glass must not turn the bedroom lights off.
+ *
+ * Favourites run through `TriggerRouter` exactly as an NFC tap or a controller button does. There
+ * is no execution code on this screen at all.
  */
 class RemoteModeActivity : ComponentActivity() {
 
@@ -121,7 +113,15 @@ class RemoteModeActivity : ComponentActivity() {
     private lateinit var quickControls: QuickControlsSession
 
     private val feedback = MutableStateFlow<TapFeedback?>(null)
-    private val lastOutcome = MutableStateFlow<Pair<String, Long>?>(null)
+    private val result = MutableStateFlow<AodOutcome?>(null)
+
+    /** What the face shows after something ran, and when it should fade back to ambient. */
+    private data class AodOutcome(
+        val success: Boolean,
+        val title: String,
+        val detail: String,
+        val at: Long = System.currentTimeMillis()
+    )
 
     private val presenter = object : ActivationPresenter {
         override fun openItem(tagId: String) {
@@ -135,6 +135,9 @@ class RemoteModeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Edge to edge, then `safeDrawingPadding` on the content: that is what keeps the face
+        // clear of the camera cutout and the gesture bar without a single hardcoded Pixel dimension.
+        enableEdgeToEdge()
         services = (application as TapRelayApplication).services
         controllerManager = services.controllerManager
         quickControls = QuickControlsSession(services, lifecycleScope)
@@ -145,36 +148,46 @@ class RemoteModeActivity : ComponentActivity() {
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        val mappings: StateFlow<List<ControllerMappingEntity>> =
-            services.controllerMappingDao.observeAll()
-                .stateIn(lifecycleScope, SharingStarted.Eagerly, emptyList())
         val tags: StateFlow<List<TagEntity>> =
             services.tagRepository.getAllTags()
                 .stateIn(lifecycleScope, SharingStarted.Eagerly, emptyList())
+        val favouriteIds: StateFlow<List<String>> = services.preferences.aodFavourites
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, emptyList())
         val autoDim: StateFlow<Boolean> = services.preferences.remoteAutoDim
             .stateIn(lifecycleScope, SharingStarted.Eagerly, true)
         val densityPref: StateFlow<AodDensity> = services.preferences.aodDensity
             .stateIn(lifecycleScope, SharingStarted.Eagerly, AodDensity.NORMAL)
+        val showClockPref: StateFlow<Boolean> = services.preferences.aodShowClock
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, true)
+        val confirmPref: StateFlow<Boolean> = services.preferences.aodConfirmActions
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, true)
+        val monoPref: StateFlow<Boolean> = services.preferences.aodMonochrome
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, false)
 
         setContent {
             TapRelayTheme {
                 val controllers by controllerManager.connectedControllers.collectAsState()
-                val rows by mappings.collectAsState()
                 val items by tags.collectAsState()
+                val favourites by favouriteIds.collectAsState()
                 val pill by feedback.collectAsState()
-                val outcome by lastOutcome.collectAsState()
+                val outcome by result.collectAsState()
                 val quick by quickControls.state.collectAsState()
                 val lastInput by controllerManager.lastInput.collectAsState()
                 val dimWhenIdle by autoDim.collectAsState()
                 val aod by densityPref.collectAsState()
+                val showClock by showClockPref.collectAsState()
+                val confirmFirst by confirmPref.collectAsState()
+                val monochrome by monoPref.collectAsState()
 
                 var awake by remember { mutableLongStateOf(System.currentTimeMillis()) }
                 var now by remember { mutableStateOf(LocalDateTime.now()) }
                 var shift by remember { mutableStateOf(0) }
+                var armedId by remember { mutableStateOf<String?>(null) }
+                var runningId by remember { mutableStateOf<String?>(null) }
 
                 val bright = !dimWhenIdle ||
-                    // Never doze underneath an open control panel.
                     quick.open ||
+                    runningId != null ||
                     System.currentTimeMillis() - awake < BRIGHT_MS ||
                     (lastInput?.second ?: 0L) > System.currentTimeMillis() - BRIGHT_MS
                 val dozing = !bright
@@ -184,7 +197,7 @@ class RemoteModeActivity : ComponentActivity() {
                 LaunchedEffect(dozing) {
                     while (true) {
                         now = LocalDateTime.now()
-                        shift = (now.minute % 6)
+                        shift = now.minute % 6
                         delay(
                             if (dozing) 60_000L - (System.currentTimeMillis() % 60_000L)
                             else 1_000L
@@ -200,6 +213,22 @@ class RemoteModeActivity : ComponentActivity() {
                     }
                 }
 
+                // An armed tile disarms itself, so a half-press never sits waiting indefinitely.
+                LaunchedEffect(armedId) {
+                    if (armedId != null) {
+                        delay(ARM_MS)
+                        armedId = null
+                    }
+                }
+
+                // The result is a moment, not a state: it clears itself and the face returns.
+                LaunchedEffect(outcome?.at) {
+                    if (outcome != null) {
+                        delay(RESULT_MS)
+                        result.value = null
+                    }
+                }
+
                 // Pixel shift inside safe bounds so a fixed face never burns into the panel.
                 val dx by animateDpAsState(((shift % 3) * 4 - 4).dp, tween(2_000), label = "dx")
                 val dy by animateDpAsState(((shift / 3) * 6 - 3).dp, tween(2_000), label = "dy")
@@ -208,15 +237,12 @@ class RemoteModeActivity : ComponentActivity() {
                     if (bright) 1f else 0.34f, tween(1_500), label = "alpha"
                 )
 
-                val accent = MaterialTheme.colorScheme.primary
-                val idle = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                val pressed = lastInput
-                    ?.takeIf { System.currentTimeMillis() - it.second < PRESS_FLASH_MS }
-                    ?.first?.key
+                val accent = if (monochrome) Color.White else MaterialTheme.colorScheme.primary
+                val resolved = remember(items, favourites) { resolveFavourites(items, favourites) }
 
                 Surface(
                     color = Color.Black,
-                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    contentColor = Color.White,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     var dragged by remember { mutableFloatStateOf(0f) }
@@ -240,79 +266,92 @@ class RemoteModeActivity : ComponentActivity() {
                     ) {
                         val landscape = maxWidth > maxHeight
                         val sheetMax = maxHeight * 0.92f
-                        val gap = aod.gap
-                        val padWidth = if (landscape) maxWidth * 0.42f else maxWidth
 
-                        Box(
+                        Column(
                             Modifier
                                 .fillMaxSize()
-                                .statusBarsPadding()
-                                .navigationBarsPadding()
+                                .safeDrawingPadding()
                                 .offset(x = dx, y = dy)
                                 .alpha(contentAlpha)
-                                .padding(horizontal = aod.sidePadding, vertical = 8.dp)
+                                .padding(horizontal = aod.sidePadding, vertical = 10.dp)
                         ) {
-                            if (landscape) {
-                                // Wide: the always-lit half stays left, the detail scrolls right.
-                                Row(Modifier.fillMaxSize()) {
-                                    Column(
-                                        Modifier
-                                            .weight(1f)
-                                            .verticalScroll(rememberScrollState())
-                                    ) {
-                                        ClockBlock(now, aod) { finish() }
-                                        Spacer(Modifier.height(gap))
-                                        ControllerLine(
-                                            name = controllers.firstOrNull()?.name,
-                                            battery = controllers.firstOrNull()?.batteryPercent,
-                                            connected = controllers.isNotEmpty(),
-                                            accent = accent,
-                                            idle = idle
+                            Row(verticalAlignment = Alignment.Top) {
+                                if (showClock) {
+                                    AodClock(now, if (landscape) aod.clockSp * 3 / 4 else aod.clockSp, dozing)
+                                }
+                                Spacer(Modifier.weight(1f))
+                                if (!dozing) {
+                                    IconButton(onClick = { finish() }) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Leave the always-on face",
+                                            tint = Color.White.copy(alpha = 0.35f)
                                         )
-                                        if (dozing) {
-                                            Spacer(Modifier.height(gap))
-                                            SlideHint()
-                                        }
-                                    }
-                                    if (!dozing) {
-                                        Spacer(Modifier.width(gap))
-                                        Column(
-                                            Modifier
-                                                .weight(1.1f)
-                                                .verticalScroll(rememberScrollState())
-                                        ) {
-                                            Detail(
-                                                rows, items, pressed, accent, idle, aod,
-                                                padWidth, outcome, now
-                                            )
-                                        }
                                     }
                                 }
+                            }
+
+                            Spacer(Modifier.height(if (dozing) 18.dp else aod.gap))
+
+                            AodStatusLine(
+                                controllerName = controllers.firstOrNull()?.name,
+                                battery = controllers.firstOrNull()?.batteryPercent,
+                                connected = controllers.isNotEmpty(),
+                                accent = accent
+                            )
+
+                            if (dozing) {
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    "Slide to wake",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.28f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
                             } else {
-                                Column(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .verticalScroll(rememberScrollState())
-                                ) {
-                                    ClockBlock(now, aod) { finish() }
-                                    Spacer(Modifier.height(gap))
-                                    ControllerLine(
-                                        name = controllers.firstOrNull()?.name,
-                                        battery = controllers.firstOrNull()?.batteryPercent,
-                                        connected = controllers.isNotEmpty(),
-                                        accent = accent,
-                                        idle = idle
+                                Spacer(Modifier.height(aod.gap + 8.dp))
+
+                                val current = outcome
+                                if (current != null) {
+                                    Spacer(Modifier.weight(0.6f))
+                                    AodResult(
+                                        success = current.success,
+                                        title = current.title,
+                                        detail = current.detail,
+                                        accent = accent
                                     )
-                                    if (dozing) {
-                                        Spacer(Modifier.height(gap + 12.dp))
-                                        SlideHint()
-                                    } else {
-                                        Spacer(Modifier.height(gap))
-                                        Detail(
-                                            rows, items, pressed, accent, idle, aod,
-                                            padWidth, outcome, now
+                                    Spacer(Modifier.weight(1f))
+                                } else if (resolved.isEmpty()) {
+                                    AodEmpty(onOpenSettings = {
+                                        startActivity(
+                                            Intent(this@RemoteModeActivity, MainActivity::class.java)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         )
-                                    }
+                                    })
+                                    Spacer(Modifier.weight(1f))
+                                } else {
+                                    Favourites(
+                                        favourites = resolved,
+                                        armedId = armedId,
+                                        runningId = runningId,
+                                        accent = accent,
+                                        landscape = landscape,
+                                        onPress = { tag ->
+                                            awake = System.currentTimeMillis()
+                                            when {
+                                                !confirmFirst || armedId == tag.tagId -> {
+                                                    armedId = null
+                                                    runningId = tag.tagId
+                                                    fire(tag) { runningId = null }
+                                                }
+                                                else -> armedId = tag.tagId
+                                            }
+                                        }
+                                    )
+                                    Spacer(Modifier.weight(1f))
                                 }
                             }
                         }
@@ -360,12 +399,6 @@ class RemoteModeActivity : ComponentActivity() {
                                 }
                             }
                         }
-
-                        TapRelayPill(
-                            feedback = pill,
-                            onDismiss = { feedback.value = null },
-                            modifier = Modifier.align(Alignment.TopCenter)
-                        )
                     }
                 }
             }
@@ -373,12 +406,53 @@ class RemoteModeActivity : ComponentActivity() {
     }
 
     /**
+     * Runs a favourite the same way every other trigger does.
+     *
+     * The pill is suppressed here: the face has its own, larger result, and two messages about one
+     * press is exactly the clutter this screen is meant not to have.
+     */
+    private fun fire(tag: TagEntity, onSettled: () -> Unit) {
+        services.triggerRouter.fire(
+            tagId = tag.tagId,
+            source = TriggerSource.IN_APP,
+            presenter = presenter
+        ) { fb ->
+            if (fb.pending) return@fire
+            onSettled()
+            result.value = AodOutcome(
+                success = !fb.isError,
+                title = tag.friendlyName,
+                detail = summaryOf(fb, tag)
+            )
+        }
+    }
+
+    /** "4 actions completed", "3/4 · Air purifier unavailable", "On". */
+    private fun summaryOf(fb: TapFeedback, tag: TagEntity): String {
+        val progress = fb.progress
+        if (progress != null) {
+            return if (fb.isError) {
+                "${progress.completed}/${progress.total} · " + fb.title.substringAfterLast(" • ")
+            } else {
+                val word = if (progress.total == 1) "action" else "actions"
+                "${progress.completed} $word completed"
+            }
+        }
+        // Everything else already reads well; strip the item name the face is showing anyway.
+        return fb.title.removePrefix("${tag.friendlyName} • ")
+    }
+
+    /** Favourites in the owner's order, silently dropping any that were deleted. */
+    private fun resolveFavourites(items: List<TagEntity>, ids: List<String>): List<TagEntity> =
+        ids.mapNotNull { id -> items.firstOrNull { it.tagId == id && it.enabled } }
+
+    /**
      * Backlight and frame rate together.
      *
      * `screenBrightness = 0f` is the panel's own dimmest setting rather than off. The Pixel 7
      * only offers 60 Hz and 90 Hz as app-selectable modes, so the low render rates it really
      * supports (down to 20 Hz) are reached by asking for the low frame-rate *category* on
-     * Android 15 and letting the compositor pick — which is also the only sanctioned way to do it.
+     * Android 15 and letting the compositor pick - which is also the only sanctioned way to do it.
      */
     private fun applyDisplay(low: Boolean) {
         val lp = window.attributes
@@ -416,7 +490,13 @@ class RemoteModeActivity : ComponentActivity() {
         super.onResume()
         controllerManager.onFeedback = { fb ->
             feedback.value = fb
-            if (!fb.pending) lastOutcome.value = fb.title to System.currentTimeMillis()
+            if (!fb.pending) {
+                result.value = AodOutcome(
+                    success = !fb.isError,
+                    title = fb.title.substringBefore(" • ").ifBlank { "Done" },
+                    detail = fb.title.substringAfter(" • ", "")
+                )
+            }
         }
         controllerManager.presenter = presenter
         controllerManager.startListening()
@@ -440,7 +520,12 @@ class RemoteModeActivity : ComponentActivity() {
 
     companion object {
         private const val BRIGHT_MS = 18_000L
-        private const val PRESS_FLASH_MS = 900L
+
+        /** How long an armed favourite waits for its second tap. */
+        private const val ARM_MS = 3_500L
+
+        /** How long the result stays before the face returns to ambient. */
+        private const val RESULT_MS = 4_000L
 
         /** How far a finger must travel before the face counts it as a deliberate wake. */
         private const val WAKE_SLIDE_PX = 90f
@@ -451,240 +536,56 @@ class RemoteModeActivity : ComponentActivity() {
     }
 }
 
-private object RemoteModeFormats {
-    val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-    val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM")
-}
-
+/**
+ * The favourites themselves: the first one large, the rest two to a row.
+ *
+ * The hierarchy is the point. Somebody glancing at a phone propped on a desk should find the one
+ * thing they press most without reading anything.
+ */
 @Composable
-private fun ClockBlock(now: LocalDateTime, aod: AodDensity, onClose: () -> Unit) {
-    Row(verticalAlignment = Alignment.Top) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                now.format(RemoteModeFormats.TIME),
-                fontSize = aod.clockSp.sp,
-                fontWeight = FontWeight.Light,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                now.format(RemoteModeFormats.DATE),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline
-            )
-        }
-        IconButton(onClick = onClose) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Leave Remote Mode",
-                tint = MaterialTheme.colorScheme.outline
-            )
-        }
-    }
-}
-
-@Composable
-private fun ControllerLine(
-    name: String?,
-    battery: Int?,
-    connected: Boolean,
+private fun Favourites(
+    favourites: List<TagEntity>,
+    armedId: String?,
+    runningId: String?,
     accent: Color,
-    idle: Color
+    landscape: Boolean,
+    onPress: (TagEntity) -> Unit
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(if (connected) accent else idle)
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
-            name ?: "Waiting for a controller…",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-        battery?.let { percent ->
-            Spacer(Modifier.width(10.dp))
-            Icon(
-                Icons.Default.BatteryFull,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(15.dp)
-            )
-            Spacer(Modifier.width(3.dp))
-            Text(
-                "$percent%",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.outline
-            )
-        }
+    fun stateOf(tag: TagEntity) = when (tag.tagId) {
+        runningId -> TileState.RUNNING
+        armedId -> TileState.ARMED
+        else -> TileState.IDLE
     }
-}
 
-@Composable
-private fun SlideHint() {
-    Text(
-        "Slide to wake",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.outline,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth()
-    )
-}
-
-/** Everything hidden while dozing: the pad, the mapping list and the last outcome. */
-@Composable
-private fun ColumnScope.Detail(
-    rows: List<ControllerMappingEntity>,
-    items: List<TagEntity>,
-    pressed: String?,
-    accent: Color,
-    idle: Color,
-    aod: AodDensity,
-    padWidth: Dp,
-    outcome: Pair<String, Long>?,
-    now: LocalDateTime
-) {
-    if (aod.showDiagram) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            GamepadDiagram(
-                mappedKeys = rows.filter { it.enabled }.map { it.inputKey }.toSet(),
-                pressedKey = pressed,
+    Column(verticalArrangement = Arrangement.spacedBy(if (landscape) 8.dp else 12.dp)) {
+        val primary = favourites.first()
+        // Landscape has too little height for a tall hero, so everything becomes a tile.
+        if (!landscape) {
+            AodPrimaryTile(
+                tag = primary,
+                subtitle = aodSubtitle(primary),
+                state = stateOf(primary),
                 accent = accent,
-                idle = idle,
-                // Never let the pad dominate a wide screen.
-                modifier = Modifier.widthIn(max = if (padWidth < 420.dp) padWidth else 420.dp)
+                onClick = { onPress(primary) }
             )
         }
-        Spacer(Modifier.height(aod.gap))
-    }
 
-    if (rows.isEmpty()) {
-        Text(
-            "No buttons mapped yet. Open TapRelay → Controllers & Remotes.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.outline
-        )
-    } else {
-        Column(verticalArrangement = Arrangement.spacedBy(aod.rowGap)) {
-            rows.forEach { mapping ->
-                MappingRow(
-                    mapping = mapping,
-                    item = items.firstOrNull { it.tagId == mapping.tagId },
-                    highlighted = pressed == mapping.inputKey,
-                    accent = accent,
-                    aod = aod
-                )
+        val rest = if (landscape) favourites else favourites.drop(1)
+        rest.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { tag ->
+                    AodTile(
+                        tag = tag,
+                        subtitle = aodSubtitle(tag),
+                        state = stateOf(tag),
+                        accent = accent,
+                        onClick = { onPress(tag) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                // Keeps a lone tile on the last row half-width rather than stretched across.
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-    }
-
-    outcome?.let { (text, at) ->
-        Spacer(Modifier.height(aod.gap))
-        Text(
-            text + " • " + agoLabel(at, now),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-
-    Spacer(Modifier.height(10.dp))
-    Text(
-        "Screen stays on, goes dark on its own and slows the display down. Android delivers " +
-            "controller buttons only to the app in front, so leave this open.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth()
-    )
-    Spacer(Modifier.height(12.dp))
-}
-
-@Composable
-private fun MappingRow(
-    mapping: ControllerMappingEntity,
-    item: TagEntity?,
-    highlighted: Boolean,
-    accent: Color,
-    aod: AodDensity
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (highlighted) accent.copy(alpha = 0.18f)
-        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (mapping.enabled) 0.55f else 0.2f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            Modifier.padding(horizontal = 12.dp, vertical = aod.rowPadding),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = RoundedCornerShape(7.dp),
-                color = if (highlighted) accent else accent.copy(alpha = 0.22f)
-            ) {
-                Text(
-                    shortLabel(mapping.inputLabel),
-                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (highlighted) Color.Black else accent
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Icon(
-                iconFor(item?.iconKey ?: "lamp"),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(17.dp)
-            )
-            Spacer(Modifier.width(9.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    item?.friendlyName ?: "Mapped action",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    (mapping.activationMode ?: item?.activation ?: ActivationMode.EXECUTE).label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-            // The state TapRelay last drove this item to.
-            item?.let {
-                Box(
-                    Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (it.lastKnownState == 1) accent
-                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                        )
-                )
-            }
-        }
-    }
-}
-
-/** "A Button" reads as "A" on a face this dense; chords keep both halves. */
-private fun shortLabel(label: String): String =
-    label.replace(" Button", "").replace("D-Pad ", "D-pad ")
-
-private fun agoLabel(at: Long, tick: LocalDateTime): String {
-    // tick is unused beyond forcing a recomposition each second.
-    val seconds = ((System.currentTimeMillis() - at) / 1000L).coerceAtLeast(0L)
-    return when {
-        seconds < 5 -> "just now"
-        seconds < 60 -> "${seconds}s ago"
-        seconds < 3600 -> "${seconds / 60}m ago"
-        else -> "${seconds / 3600}h ago"
     }
 }

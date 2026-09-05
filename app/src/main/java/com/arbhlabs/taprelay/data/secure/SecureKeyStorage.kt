@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "secure_keys")
@@ -21,6 +23,8 @@ class SecureKeyStorage(
     private val TUYA_REGION = stringPreferencesKey("tuya_region")
     private val TUYA_UID = stringPreferencesKey("tuya_uid")
     private val SENSIBO_API_KEY = stringPreferencesKey("sensibo_api_key")
+    private val HA_BASE_URL = stringPreferencesKey("ha_base_url")
+    private val HA_TOKEN = stringPreferencesKey("ha_token")
     private val PRO_KEY = stringPreferencesKey("pro_key")
     private val PRO_TIER = stringPreferencesKey("pro_tier")
     private val PRO_EXPIRES = stringPreferencesKey("pro_expires")
@@ -35,7 +39,7 @@ class SecureKeyStorage(
                     null
                 }
             }
-        }
+        }.flowOn(Dispatchers.IO)
     }
 
     suspend fun saveGoveeApiKey(apiKey: String) {
@@ -67,7 +71,7 @@ class SecureKeyStorage(
             } catch (e: Exception) {
                 null
             }
-        }
+        }.flowOn(Dispatchers.IO)
     }
 
     suspend fun saveTuyaCredentials(creds: TuyaCredentials) {
@@ -101,7 +105,7 @@ class SecureKeyStorage(
                     null
                 }
             }
-        }
+        }.flowOn(Dispatchers.IO)
     }
 
     suspend fun saveSensiboApiKey(apiKey: String) {
@@ -116,6 +120,70 @@ class SecureKeyStorage(
             preferences.remove(SENSIBO_API_KEY)
         }
     }
+
+    /**
+     * The owner's own Home Assistant instance. The long-lived access token is full control of
+     * their home, so it is encrypted exactly like the Tuya secret and never leaves the phone.
+     */
+    fun getHomeAssistantCredentials(): Flow<HomeAssistantCredentials?> {
+        return context.dataStore.data.map { preferences ->
+            val encUrl = preferences[HA_BASE_URL] ?: return@map null
+            val encToken = preferences[HA_TOKEN] ?: return@map null
+            try {
+                HomeAssistantCredentials(
+                    baseUrl = aeadManager.decrypt(encUrl),
+                    token = aeadManager.decrypt(encToken)
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }.flowOn(Dispatchers.IO)
+    }
+
+    suspend fun saveHomeAssistantCredentials(creds: HomeAssistantCredentials) {
+        val encUrl = aeadManager.encrypt(creds.baseUrl)
+        val encToken = aeadManager.encrypt(creds.token)
+        context.dataStore.edit { preferences ->
+            preferences[HA_BASE_URL] = encUrl
+            preferences[HA_TOKEN] = encToken
+        }
+    }
+
+    suspend fun clearHomeAssistantCredentials() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(HA_BASE_URL)
+            preferences.remove(HA_TOKEN)
+        }
+    }
+
+    /**
+     * The credential a single web-request item sends, kept out of the tags table.
+     *
+     * The tags row holds the header *name* so the editor can show "Authorization" without
+     * decrypting anything; only the value lives here. That is also what keeps a shared or
+     * exported item from carrying somebody's key with it.
+     */
+    fun getWebhookSecret(tagId: String): Flow<String?> {
+        val key = stringPreferencesKey(webhookSecretKey(tagId))
+        return context.dataStore.data.map { preferences ->
+            preferences[key]?.let { runCatching { aeadManager.decrypt(it) }.getOrNull() }
+        }.flowOn(Dispatchers.IO)
+    }
+
+    suspend fun saveWebhookSecret(tagId: String, secret: String) {
+        val encrypted = aeadManager.encrypt(secret)
+        context.dataStore.edit { preferences ->
+            preferences[stringPreferencesKey(webhookSecretKey(tagId))] = encrypted
+        }
+    }
+
+    suspend fun clearWebhookSecret(tagId: String) {
+        context.dataStore.edit { preferences ->
+            preferences.remove(stringPreferencesKey(webhookSecretKey(tagId)))
+        }
+    }
+
+    private fun webhookSecretKey(tagId: String) = "webhook_secret_$tagId"
 
     fun getProLicense(): Flow<ProLicense?> {
         return context.dataStore.data.map { preferences ->
@@ -133,7 +201,7 @@ class SecureKeyStorage(
             } catch (e: Exception) {
                 null
             }
-        }
+        }.flowOn(Dispatchers.IO)
     }
 
     suspend fun saveProLicense(license: ProLicense) {
@@ -164,6 +232,12 @@ data class ProLicense(
     val tier: String = "pro",
     val expiresAt: Long = 0L,
     val signature: String = ""
+)
+
+/** The address of the owner's own Home Assistant and the token they issued for TapRelay. */
+data class HomeAssistantCredentials(
+    val baseUrl: String,
+    val token: String
 )
 
 data class TuyaCredentials(

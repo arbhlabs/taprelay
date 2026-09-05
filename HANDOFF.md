@@ -1,105 +1,117 @@
-# TapRelay — handoff, 2026-09-04 (after 0.1.4)
+# TapRelay — handoff, 2026-09-05 (after 0.2.1)
 
 ## TL;DR
 
-**0.1.4 is shipped, live and hash-verified.** The working tree is clean. Nothing is half-finished.
+**0.2.1 is shipped, live and hash-verified.** Nothing is half-finished in code.
 
-The one thing left for a human: **on-device validation on the Pixel 7 with the Xbox pad** — no
-device was attached to ADB during the 0.1.4 run. The exact script is section 3 of
-`docs/QA-v0.1.4.md`. And **LastDose 7.1.10 is built and signed but not published** (see §3).
+The one thing left for a human: **hardware verification of the surfaces listed in
+`docs/QA-v0.2.1.md` §3.** The release was called before they were exercised on the Pixel. They
+compile, they ship, and the engine underneath them is proven on-device — but they were not pressed.
 
 ---
 
 ## 1. What is live
 
-TapRelay **0.1.4 / versionCode 15**, SHA-256
-`53c3ff7f58f07467f82a4df8b629441e08b29dafbe4f733a14274b1b10754ba1`, 7,747,951 bytes,
-Room schema **10**.
+TapRelay **0.2.1 / versionCode 17**, SHA-256
+`8ec11701c80201a0ffe38a2b995c05d8335799ee18d605564c3d62c872d079c4`, 7,982,103 bytes,
+Room schema **11**.
 
-- `https://arbhlabs.com/downloads/TapRelay-0.1.4.apk` and `/TapRelay.apk`, both hash-verified by
-  download; 0.1.2, 0.1.1, 0.1.0 and 0.0.10 still resolve unchanged
-- Tag `taprelay-0.1.4`; full record in `docs/QA-v0.1.4.md` and `dist/SITE_PUBLISH.md`
+- `https://arbhlabs.com/downloads/TapRelay-0.2.1.apk` and `/TapRelay.apk`, both hash-verified by
+  download; 0.1.5, 0.1.4, 0.1.2 and 0.1.0 still resolve unchanged
+- Tag `taprelay-0.2.1`; full record in `docs/QA-v0.2.1.md`, `docs/RESEARCH_0.2.1.md` and
+  `dist/SITE_PUBLISH.md`
+- Signing certificate SHA-256 `7ed03578…ba808` — the digest LastDose pins, so cross-app logging
+  works with this build
 
-**0.1.3 is closed.** It was code-complete but never published; everything in it (the paywall
-removal) ships inside 0.1.4. Do not resurrect it. The AGP/Gradle toolchain drift the previous
-handoff warned about is no longer in the tree — 0.1.4 was built on the same Microsoft JDK 21
-toolchain that produced 0.1.2.
+---
 
 ## 2. The architecture that matters now
 
 ```
-NFC tap ───┐
-Controller ├──> TriggerRouter.fire(tagId) ──> activation mode ──> ActionExecutor
-Place ─────┤                                                        ├─ smart-home provider
-In-app ────┘                                                        └─ LastDose (tag.isLastDose)
+NFC tap ─────┐
+Controller ──┤
+Place ───────┼──> TriggerRouter.fire(tagId) ──> ActionExecutor.run()
+Widget ──────┤                                    ├─ smart-home provider (Govee / Tuya /
+Always-on ───┤                                    │   Sensibo / Home Assistant)
+In-app ──────┘                                    ├─ LastDose        (targetType LASTDOSE_LOG)
+                                                  ├─ web request     (WEBHOOK)
+                                                  ├─ open app/link   (LAUNCH)
+                                                  ├─ Do Not Disturb  (PHONE)
+                                                  └─ Magic Action    (MAGIC_ACTION)
 ```
 
-**A LastDose log is an item, not a feature.** It is a `TagEntity` with
-`targetType = LASTDOSE_LOG` and four nullable `lastDose*` columns. That is the whole reason
-`Right Trigger → Bowl +1` works: the controller path, the NFC path and Places already routed
-through `TriggerRouter`, so none of them needed touching. **Adding a trigger type still means
-calling `fire()`, and adding an action target still means one branch in `ActionExecutor.run()` —
-never a new execution path per trigger.**
+**A Magic Action step is a reference to another item, and running it re-enters
+`ActionExecutor.run()` — the same call an NFC tap makes.** That is the whole design. The sequence
+engine contains no knowledge of any integration, so every target type added from now on works
+inside sequences on the day it lands. Do not give it one.
 
-`ActionExecutor.run()` branches on `tag.isLastDose` before any device-shaped work and rejoins the
-shared path at the same tap-history row, pill and haptics.
+**Home Assistant is a `SmartHomeProvider`, not a feature.** Registering it in `ServiceLocator` was
+the entire integration: the tag wizard, Quick Controls, controller mapping, places, Magic Actions,
+the always-on face and widgets all understood HA entities without being touched. If somebody ever
+proposes a "Home Assistant action type", this is why the answer is no.
 
-### The LastDose contract
+**Adding a trigger type still means calling `fire()`. Adding an action target still means one
+branch in `ActionExecutor.run()`.** Never a new execution path per trigger.
 
-`LastDoseClient.kt` → LastDose `ExternalActionProvider` → LastDose `canonicalLog` (the same method
-the LastDose on-screen button and its NFC tags use — there is no second logging implementation).
-Full spec in `LASTDOSE/ARBH_RELEASE_7.1.10.md`. Points that will bite:
+### Execution semantics (decided, not accidental)
 
-- **Needs LastDose 7.1.10+.** Older LastDose has no provider; the client reports "too old".
-- **Signature-pinned.** LastDose pins TapRelay's release cert
-  (`7ed03578928d3b8eaec35cf064154bee4d48f528b0021dd3dcd9f3fde73ba808`). A *debug* TapRelay is
-  signed by the debug key and is refused — correct, not a bug. Test with the release APK.
-- **Package visibility.** `<queries><package android:name="com.lastdose.app"/></queries>` in
-  TapRelay's manifest. Without it the provider is invisible on Android 11+ and everything reads as
-  "not installed".
-- **Success is never assumed.** Only `LOGGED` (after LastDose has read the row back) is reported as
-  success. `requestId` makes a duplicated delivery of one press a no-op.
-- `LastDoseClient` calls block. Always off the main thread.
+- A failed step **does not stop the sequence**. There is deliberately no stop-on-failure switch.
+- 12 s per step, 40 s overall on the widget path.
+- One item runs once at a time (`ActionExecutor` single-flight claim), on top of the 1.5 s scan
+  debounce. A repeated controller pull mid-sequence is one intent expressed twice.
+- No retries. A nested Magic Action is refused at run time.
+- `ActionExecutor.running` is a `StateFlow<Set<String>>`; **every surface subscribes to it and
+  marks the thing the finger landed on**. That is what stops a cloud toggle feeling like a frozen
+  button — a toggle must read the device's real state before it can invert it, and that round trip
+  is hundreds of milliseconds. Do not "fix" that by guessing the state instead.
 
-### Analog triggers
-
-`ControllerInputProcessor.processTriggerAxes` now has hysteresis: activate at **0.65**, release at
-**0.30**. Once armed the trigger produces nothing until the axis falls below the release threshold.
-The old single 0.6 threshold re-fired on every wobble across it. `AnalogTriggerTest` pins the
-behaviour — do not "simplify" it back to one constant.
+---
 
 ## 3. Open items
 
-1. **Pixel 7 + Xbox pad validation of 0.1.4.** Script in `docs/QA-v0.1.4.md` §3. Install with
-   `adb install -r`, **never** `connectedAndroidTest`.
-2. **LastDose 7.1.10 is not published.** It is built, signed and staged at
-   `LASTDOSE/dist/LastDose-v7.1.10.apk` (vc109), committed and tagged `lastdose-7.1.10`. It was held
-   back because 7.1.9 has also never been published or device-validated and would ship alongside it.
-   Validate both, then publish through `tools/publish-release.mjs lastdose 7.1.10 …`.
-   **Until that happens, TapRelay 0.1.4's LastDose logging does nothing on Aaron's phone** — it will
-   say "Update LastDose to log from TapRelay."
-3. **Quick Controls from a physical NFC tap while TapRelay is closed** — still verified by
-   construction only. `adb` cannot start a non-exported activity, so this needs a human with a tag.
+1. **Hardware verification of the untested surfaces** — `docs/QA-v0.2.1.md` §3 lists exactly what
+   was not pressed: Home Assistant, widgets on a launcher, Do Not Disturb, open app/link, web
+   requests, the redesigned always-on face itself, a physical NFC tap, and a controller button
+   against a 0.2.1 build.
+2. **Post-fix frame measurement.** The main-thread Keystore work is off the main thread now, but no
+   before/after `gfxinfo` comparison was captured over a meaningful sample.
+3. **Deferred by decision, documented in `docs/RESEARCH_0.2.1.md`:** decoupling `HomeUiState`,
+   Baseline Profiles (needs a macrobenchmark module — adding `profileinstaller` alone does
+   nothing), QR triggers, JSON backup/restore, controller chords.
+4. **The paywall stays off.** The boundary is built and inert; `canAccess()` returns `true`. See
+   `docs/RESEARCH_0.2.1.md` §5 for the three independent reasons and what would have to change.
+
+---
 
 ## 4. Things learned the hard way (do not re-derive)
 
-- **Gamepad input reaches only the focused window.** A Compose `Dialog` gets its own window, so a
-  learning dialog never sees the pad. Services, `MediaSession` and non-focusable overlays receive
-  nothing at all. **There is no compliant background controller listener on Android** — Remote Mode
-  works because it is a real, focused activity. Never promise logging with TapRelay fully closed;
-  the delivered promise is "TapRelay's remote face is up, LastDose is closed", which is the actual
-  use case.
-- Pixel 7 exposes only **60 Hz and 90 Hz** as app-selectable display modes; the 20–45 Hz values in
-  `mSupportedRefreshRates` are system render rates, reached with Android 15's
-  `View.setRequestedFrameRate(REQUESTED_FRAME_RATE_CATEGORY_LOW)`.
+- **The provider ids are `govee_cloud` and `tuya_cloud`**, not `govee` / `tuya`. Four separate
+  copies of a provider-label `when` had all guessed the short forms and all silently fell through
+  to "Device". There is now one `ItemLabels`. Use it.
+- **Define every Material colour role you can reach.** `secondaryContainer` was never set, so every
+  selected `FilterChip` and every `FilledTonalButton` in the app was drawn in Material's baseline
+  lavender next to TapRelay's teal. Leaving a role out does not disable it.
+- **Room's `@Database` has CLASS retention** — you cannot read the schema version by reflection at
+  run time. Hence `TAPRELAY_SCHEMA_VERSION`, which `MigrationChainTest` asserts the chain against.
+- **Gamepad input reaches only the focused window.** No compliant background controller listener
+  exists on Android. The always-on face works because it is a real, focused activity.
+- **Widgets cannot animate.** "Buttery" is bought by writing the running state and redrawing
+  *before* the asynchronous work starts, so the tile changes within a frame of the tap.
+- **`RemoteViews(Map<SizeF, RemoteViews>)` is API 31+**; minSdk is 30, so it needs a guard and a
+  single-layout fallback.
+- **Tink decryption runs on whichever thread collects the flow.** Every `SecureKeyStorage` flow is
+  `.flowOn(Dispatchers.IO)` for that reason; without it, launch does Keystore IPC on the main
+  thread.
+- Pixel 7 exposes only **60 Hz and 90 Hz** as app-selectable modes; lower render rates come from
+  `View.REQUESTED_FRAME_RATE_CATEGORY_LOW`.
 - `WindowManager.LayoutParams.screenBrightness = 0f` is the panel's dimmest, not off.
 - Sensibo: `remoteCapabilities.modes[mode].fanLevels` is authoritative. Aaron's Pure air purifier
-  reports **only `low` and `high`** (plus `auto`) and a single `fan` mode. Never hardcode speeds.
+  reports only `low` and `high`. Never hardcode speeds.
+- `ControllerInputProcessor.processTriggerAxes` has hysteresis (activate 0.65, release 0.30).
+  `AnalogTriggerTest` pins it — do not simplify it back to one constant.
 - Geofences are dropped on reboot and on app replace — `BootReceiver` rebuilds them from the DB.
-- Background location is a separate grant and on Android 11+ usually only obtainable from Settings.
 - `adb` cannot start a non-exported activity.
-- **The main item list filters LastDose items out**; they have their own screen. The Controllers
-  target picker deliberately does not filter — that is where a button gets bound to one.
-- On Windows, a stale Gradle daemon (the foojay-downloaded JDK 25 ones especially) holds
-  `app/build/intermediates/lint-cache` open and makes `clean` fail with "Unable to delete
-  directory". `Stop-Process` the daemon; `rm -rf` will not win.
+- On Windows, a stale Gradle daemon holds `app/build/intermediates/lint-cache` open and makes
+  `clean` fail. `Stop-Process` the daemon; `rm -rf` will not win.
+- Build with **Microsoft JDK 21**. The Android Studio JBR is Java 25 and breaks the Kotlin compiler.
+- **Never `connectedAndroidTest` against Aaron's device** — it has wiped app data before.
