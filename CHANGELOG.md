@@ -1,5 +1,18 @@
 # TapRelay Changelog
 
+## v0.3.1 - 2026-09-06 (Alpha / Internal Test)
+
+- **ARBH Labs HapticSignatures.** Completed actions now use a stable tactile language: LastDose
+  logs are crisp doubles, controls are shaped confirmations, macros are short sequences, and
+  failures are unmistakable. Assignments are deterministic and kept perceptually separated as
+  mappings are added. Android's actual controller vibrator IDs are discovered at runtime; trigger
+  motors are never assumed or claimed without being exposed by Android.
+- **Controller while LastDose AOD is open.** LastDose forwards supported Xbox/controller button
+  presses from its focused always-on screen directly to TapRelay's authenticated hand-off. Existing
+  TapRelay mappings can therefore control devices, log to LastDose, or open Quick Controls without
+  leaving the AOD. Analog axis-only trigger positions remain subject to Android focus limitations.
+- Controller and phone haptics can be turned off independently; Haptic Signatures are on by default.
+
 ## v0.2.1 - 2026-09-05 (Alpha / Internal Test)
 
 **Turn anything into a programmable button.** One press now runs a whole sequence, Home Assistant

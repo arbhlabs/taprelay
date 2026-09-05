@@ -39,6 +39,7 @@ class AppPreferences(private val context: Context) {
     private val onboardedKey = booleanPreferencesKey("onboarding_complete")
     private val controllerRumbleKey = booleanPreferencesKey("controller_rumble")
     private val phoneHapticsKey = booleanPreferencesKey("phone_haptics")
+    private val automaticHapticSignaturesKey = booleanPreferencesKey("automatic_haptic_signatures")
     private val remoteAutoDimKey = booleanPreferencesKey("remote_auto_dim")
     private val aodDensityKey = stringPreferencesKey("aod_density")
     private val aodFavouritesKey = stringPreferencesKey("aod_favourites")
@@ -55,6 +56,10 @@ class AppPreferences(private val context: Context) {
 
     val phoneHaptics: Flow<Boolean> =
         context.appPrefs.data.map { it[phoneHapticsKey] ?: true }
+
+    /** ARBH Labs' semantic, persistent action feedback. Enabled by default. */
+    val automaticHapticSignatures: Flow<Boolean> =
+        context.appPrefs.data.map { it[automaticHapticSignaturesKey] ?: true }
 
     /** Whether Remote Mode fades to near-black when left alone. */
     val remoteAutoDim: Flow<Boolean> =
@@ -117,6 +122,10 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setPhoneHaptics(value: Boolean) {
         context.appPrefs.edit { it[phoneHapticsKey] = value }
+    }
+
+    suspend fun setAutomaticHapticSignatures(value: Boolean) {
+        context.appPrefs.edit { it[automaticHapticSignaturesKey] = value }
     }
 
     suspend fun setRemoteAutoDim(value: Boolean) {

@@ -1281,6 +1281,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val phoneHaptics: StateFlow<Boolean> = services.preferences.phoneHaptics
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val automaticHapticSignatures: StateFlow<Boolean> = services.preferences.automaticHapticSignatures
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val remoteAutoDim: StateFlow<Boolean> = services.preferences.remoteAutoDim
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val aodDensity: StateFlow<AodDensity> = services.preferences.aodDensity
@@ -1297,6 +1299,15 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setPhoneHaptics(value: Boolean) = viewModelScope.launch {
         services.preferences.setPhoneHaptics(value)
+    }
+
+    fun setAutomaticHapticSignatures(value: Boolean) = viewModelScope.launch {
+        services.preferences.setAutomaticHapticSignatures(value)
+    }
+
+    fun resetHapticSignatures() {
+        services.hapticSignatures.resetAssignments()
+        services.haptics.vibrateTick()
     }
 
     fun setRemoteAutoDim(value: Boolean) = viewModelScope.launch {

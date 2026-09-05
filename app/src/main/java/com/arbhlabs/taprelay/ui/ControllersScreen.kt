@@ -254,6 +254,7 @@ fun ControllersScreen(
             item {
                 val rumble by vm.controllerRumble.collectAsState()
                 val haptics by vm.phoneHaptics.collectAsState()
+                val signatures by vm.automaticHapticSignatures.collectAsState()
                 val autoDim by vm.remoteAutoDim.collectAsState()
                 val density by vm.aodDensity.collectAsState()
 
@@ -262,6 +263,12 @@ fun ControllersScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(vertical = 6.dp)) {
+                        PreferenceRow(
+                            title = "Haptic Signatures",
+                            hint = "Make completed actions feel distinct by purpose, result and controller input.",
+                            checked = signatures,
+                            onCheckedChange = { vm.setAutomaticHapticSignatures(it) }
+                        )
                         PreferenceRow(
                             title = "Controller rumble",
                             hint = "Buzz the pad in your hand when a button fires. Pads without a motor ignore this.",

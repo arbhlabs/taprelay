@@ -80,6 +80,14 @@ object ControllerKeys {
         }
     }
 
+    /** Validates a normalized key received through the tightly scoped LastDose AOD hand-off. */
+    fun normalizeKeyCodeName(key: String): String? = when (key) {
+        BUTTON_A, BUTTON_B, BUTTON_X, BUTTON_Y, BUTTON_L1, BUTTON_R1, BUTTON_L2, BUTTON_R2,
+        BUTTON_THUMBL, BUTTON_THUMBR, BUTTON_START, BUTTON_SELECT, BUTTON_MODE,
+        DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT, DPAD_CENTER -> key
+        else -> null
+    }
+
     fun isGamepadSpecificKey(keyCode: Int): Boolean {
         return (keyCode in KeyEvent.KEYCODE_BUTTON_A..KeyEvent.KEYCODE_BUTTON_16) ||
             keyCode == KeyEvent.KEYCODE_BUTTON_START ||

@@ -4,6 +4,7 @@ import com.arbhlabs.taprelay.domain.model.ActivationMode
 import com.arbhlabs.taprelay.domain.repository.TagRepository
 import com.arbhlabs.taprelay.execution.ActionExecutor
 import com.arbhlabs.taprelay.execution.TapFeedback
+import com.arbhlabs.taprelay.haptics.HapticActivationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +44,7 @@ class TriggerRouter(
         tagId: String,
         override: ActivationMode? = null,
         source: TriggerSource = TriggerSource.IN_APP,
+        hapticContext: HapticActivationContext? = null,
         presenter: ActivationPresenter? = null,
         onFeedback: (TapFeedback) -> Unit
     ) {
@@ -50,16 +52,16 @@ class TriggerRouter(
             val tag = withContext(Dispatchers.IO) { tags.getTagById(tagId) }
             // An unknown or disabled tag has one error path already: let the executor own it.
             if (tag == null || !tag.enabled) {
-                executor.executeByTagId(tagId, onFeedback)
+                executor.executeByTagId(tagId, hapticContext ?: HapticActivationContext(source), onFeedback)
                 return@launch
             }
             when (val mode = ActivationMode.resolve(override, tag.activationMode)) {
-                ActivationMode.EXECUTE -> executor.executeByTagId(tagId, onFeedback)
+                ActivationMode.EXECUTE -> executor.executeByTagId(tagId, hapticContext ?: HapticActivationContext(source), onFeedback)
                 ActivationMode.OPEN_ITEM,
                 ActivationMode.QUICK_CONTROLS -> {
                     if (presenter == null) {
                         // Nothing can show a surface here, so honour the intent as best we can.
-                        executor.executeByTagId(tagId, onFeedback)
+                        executor.executeByTagId(tagId, hapticContext ?: HapticActivationContext(source), onFeedback)
                         return@launch
                     }
                     if (!allowPresent(tagId)) return@launch

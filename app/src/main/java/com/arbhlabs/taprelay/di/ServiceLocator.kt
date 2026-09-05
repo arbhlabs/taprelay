@@ -22,6 +22,7 @@ import com.arbhlabs.taprelay.domain.provider.TuyaProvider
 import com.arbhlabs.taprelay.domain.repository.TagRepository
 import com.arbhlabs.taprelay.execution.ActionExecutor
 import com.arbhlabs.taprelay.execution.HapticsManager
+import com.arbhlabs.taprelay.haptics.HapticSignatureEngine
 import com.arbhlabs.taprelay.monetization.EntitlementRepository
 import com.arbhlabs.taprelay.trigger.TriggerRouter
 
@@ -84,6 +85,7 @@ class ServiceLocator(context: Context) {
     val phoneController = com.arbhlabs.taprelay.execution.phone.PhoneController(appContext)
 
     val haptics = HapticsManager(appContext)
+    val hapticSignatures = HapticSignatureEngine(appContext)
 
     /** Cross-app logging into LastDose. Absent LastDose, every call simply reports unavailable. */
     val lastDoseClient = com.arbhlabs.taprelay.execution.lastdose.LastDoseClient(appContext)
@@ -92,6 +94,7 @@ class ServiceLocator(context: Context) {
         tags = tagRepository,
         providers = { providers },
         haptics = haptics,
+        hapticSignatures = hapticSignatures,
         tapLogDao = tapLogDao,
         entitlements = entitlementRepository,
         lastDose = lastDoseClient,

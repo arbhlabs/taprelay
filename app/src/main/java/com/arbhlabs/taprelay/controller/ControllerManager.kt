@@ -12,9 +12,11 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import com.arbhlabs.taprelay.controller.model.ControllerDevice
 import com.arbhlabs.taprelay.controller.model.ControllerInput
+import com.arbhlabs.taprelay.controller.model.ControllerKeys
 import com.arbhlabs.taprelay.data.local.dao.ControllerMappingDao
 import com.arbhlabs.taprelay.execution.HapticsManager
 import com.arbhlabs.taprelay.execution.TapFeedback
+import com.arbhlabs.taprelay.haptics.HapticActivationContext
 import com.arbhlabs.taprelay.trigger.ActivationPresenter
 import com.arbhlabs.taprelay.trigger.TriggerRouter
 import com.arbhlabs.taprelay.trigger.TriggerSource
@@ -276,7 +278,6 @@ class ControllerManager(
             }
 
             if (mapping != null) {
-                haptics.vibrateClick()
                 onFeedback?.invoke(
                     TapFeedback(
                         title = "${mapping.inputLabel} → Triggering…",
@@ -289,9 +290,14 @@ class ControllerManager(
                     tagId = mapping.tagId,
                     override = mapping.activationMode,
                     source = TriggerSource.CONTROLLER,
+                    hapticContext = HapticActivationContext(
+                        source = TriggerSource.CONTROLLER,
+                        inputDeviceId = deviceId,
+                        physicalInput = input.key,
+                        mappingIdentity = "controller:${mapping.controllerDescriptor}:${mapping.inputKey}:${mapping.tagId}"
+                    ),
                     presenter = presenter
                 ) { fb ->
-                    if (!fb.pending) rumble(success = !fb.isError)
                     onFeedback?.invoke(fb)
                 }
             } else {
@@ -300,5 +306,15 @@ class ControllerManager(
         }
 
         return true
+    }
+
+    /**
+     * Narrow cross-app hand-off used only while LastDose's always-on activity owns focus. Android
+     * gives the focused window controller events, so LastDose forwards normalized DOWN presses to
+     * TapRelay's caller-authenticated provider instead of either app using an overlay/service.
+     */
+    fun handleForwardedInput(inputKey: String, descriptor: String, controllerName: String, deviceId: Int): Boolean {
+        val normalized = ControllerKeys.normalizeKeyCodeName(inputKey) ?: return false
+        return handleInputDetected(ControllerInput(normalized, ControllerKeys.formatLabel(normalized)), descriptor, controllerName, deviceId)
     }
 }

@@ -22,11 +22,20 @@ class TapRelayApplication : Application() {
         // Feedback preferences live on the shared managers, so the app, Remote Mode and the
         // NFC trampoline all honour them without each screen having to remember.
         scope.launch {
-            services.preferences.phoneHaptics.collectLatest { services.haptics.enabled = it }
+            services.preferences.phoneHaptics.collectLatest {
+                services.haptics.enabled = it
+                services.hapticSignatures.phoneFallbackEnabled = it
+            }
         }
         scope.launch {
             services.preferences.controllerRumble.collectLatest {
                 services.controllerManager.rumbleEnabled = it
+                services.hapticSignatures.controllerEnabled = it
+            }
+        }
+        scope.launch {
+            services.preferences.automaticHapticSignatures.collectLatest {
+                services.hapticSignatures.automaticEnabled = it
             }
         }
 

@@ -26,6 +26,8 @@ import com.arbhlabs.taprelay.execution.phone.PhoneController
 import com.arbhlabs.taprelay.execution.phone.PhoneResult
 import com.arbhlabs.taprelay.execution.webhook.WebhookClient
 import com.arbhlabs.taprelay.execution.webhook.WebhookMethod
+import com.arbhlabs.taprelay.haptics.HapticActivationContext
+import com.arbhlabs.taprelay.haptics.HapticSignatureEngine
 import com.arbhlabs.taprelay.monetization.EntitlementRepository
 import com.arbhlabs.taprelay.monetization.TapRelayProFeature
 import kotlinx.coroutines.CoroutineScope
@@ -79,6 +81,7 @@ class ActionExecutor(
     private val tags: TagRepository,
     private val providers: () -> Map<String, SmartHomeProvider>,
     private val haptics: HapticsManager,
+    private val hapticSignatures: HapticSignatureEngine? = null,
     private val debounceMs: Long = 1500L,
     private val tapLogDao: TapLogDao? = null,
     private val entitlements: EntitlementRepository? = null,
@@ -134,14 +137,14 @@ class ActionExecutor(
         const val STEP_TIMEOUT_MS = 12_000L
     }
 
-    fun executeByTagId(tagId: String, onFeedback: (TapFeedback) -> Unit) {
+    fun executeByTagId(tagId: String, hapticContext: HapticActivationContext? = null, onFeedback: (TapFeedback) -> Unit) {
         val now = System.currentTimeMillis()
         synchronized(lastFired) {
             val prev = lastFired[tagId]
             if (prev != null && now - prev < debounceMs) return
             lastFired[tagId] = now
         }
-        scope.launch { run(tagId, onFeedback) }
+        scope.launch { run(tagId, onFeedback, hapticContext = hapticContext) }
     }
 
     /** 1-tap instant replay from tap history: bypasses the scan debounce, not the single-flight. */
@@ -175,7 +178,8 @@ class ActionExecutor(
         tagId: String,
         onFeedback: (TapFeedback) -> Unit,
         depth: Int = 0,
-        silent: Boolean = false
+        silent: Boolean = false,
+        hapticContext: HapticActivationContext? = null
     ): TapOutcome {
         val startTime = System.currentTimeMillis()
         val rawTag = tags.getTagById(tagId)
@@ -193,7 +197,6 @@ class ActionExecutor(
             return TapOutcome(success = false, summary = "${rawTag.friendlyName} is already running.")
         }
         val outcome = try {
-            if (!silent) haptics.vibrateClick()
             when {
                 rawTag.isMagicAction -> runMagicAction(rawTag, startTime, depth, silent, onFeedback)
                 rawTag.isLastDose -> runLastDoseLog(rawTag, startTime, silent, onFeedback)
@@ -204,6 +207,10 @@ class ActionExecutor(
             }
         } finally {
             release(tagId)
+        }
+        if (!silent) {
+            if (hapticContext != null) hapticSignatures?.play(rawTag, outcome, hapticContext)
+            else withContext(Dispatchers.Main) { if (outcome.success) haptics.vibrateSuccess() else haptics.vibrateError() }
         }
         if (depth == 0) _executions.tryEmit(outcome)
         return outcome
@@ -667,7 +674,6 @@ class ActionExecutor(
         val text = if (useTagName) "${tag.friendlyName} • $userSummary" else userSummary
         if (!silent) {
             withContext(Dispatchers.Main) {
-                haptics.vibrateSuccess()
                 onFeedback(TapFeedback(text, isError = false))
             }
         }
@@ -697,7 +703,6 @@ class ActionExecutor(
         )
         if (!silent) {
             withContext(Dispatchers.Main) {
-                haptics.vibrateError()
                 onFeedback(TapFeedback(message, isError = true))
             }
         }

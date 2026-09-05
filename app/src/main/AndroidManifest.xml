@@ -50,6 +50,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Caller-authenticated AOD controller forwarding from the LastDose foreground window. -->
+        <provider
+            android:name=".external.LastDoseControllerProvider"
+            android:authorities="com.arbhlabs.taprelay.aod_controller"
+            android:exported="true" />
+
         <!--
             Remote Mode. Shows over the lock screen and wakes the display so the phone can sit
             docked and be driven by a game controller. Android delivers controller input only to
