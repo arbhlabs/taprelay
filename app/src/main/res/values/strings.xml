@@ -14,6 +14,7 @@
     <string name="widget_remote_description">Up to six of your actions on the home screen.</string>
 
     <!-- Controller-in-any-app accessibility service -->
+    <string name="global_controller_a11y_label">TapRelay controller (any app)</string>
     <string name="global_controller_a11y_summary">Fire a mapped controller button from any app</string>
     <string name="global_controller_a11y_description">Lets a game-controller button you have mapped in TapRelay trigger its action while you are in another app, or on the home screen. TapRelay reads only the buttons you map; it does not read screen content and does not track what you do. Turn it off any time to stop.</string>
 </resources>

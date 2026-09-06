@@ -218,15 +218,22 @@ fun ControllersScreen(
                         com.arbhlabs.taprelay.controller.GlobalControllerService.isEnabledInSettings(context)
                     )
                 }
+                var running by remember {
+                    mutableStateOf(com.arbhlabs.taprelay.controller.GlobalControllerService.isRunning())
+                }
                 // The switch is flipped in Android's own settings screen, so re-check while this
                 // card is shown rather than waiting for something to invalidate composition.
                 LaunchedEffect(Unit) {
                     while (true) {
                         enabled = com.arbhlabs.taprelay.controller.GlobalControllerService
                             .isEnabledInSettings(context)
+                        running = com.arbhlabs.taprelay.controller.GlobalControllerService.isRunning()
                         kotlinx.coroutines.delay(1500)
                     }
                 }
+                // Enabled in the list but never actually bound = Android is holding it back. On a
+                // sideloaded build that is the "restricted setting" block.
+                val blocked = enabled && !running
 
                 ElevatedCard(
                     shape = RoundedCornerShape(16.dp),
@@ -239,10 +246,36 @@ fun ControllersScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            if (enabled) {
+                            if (running) {
                                 Box(Modifier.size(8.dp).background(Color(0xFF4CAF50), CircleShape))
                                 Text("On", style = MaterialTheme.typography.labelMedium, color = Color(0xFF4CAF50))
+                            } else if (blocked) {
+                                Box(Modifier.size(8.dp).background(Color(0xFFE0A53A), CircleShape))
+                                Text("Blocked by Android", style = MaterialTheme.typography.labelMedium, color = Color(0xFFE0A53A))
                             }
+                        }
+                        if (blocked) {
+                            Text(
+                                "You turned it on, but Android has not started it — this happens to " +
+                                    "apps installed from outside the Play Store. Open TapRelay's App " +
+                                    "info, tap the ⋮ menu, choose \"Allow restricted settings\", then " +
+                                    "switch the service off and on again.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFE0A53A)
+                            )
+                            FilledTonalButton(
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(
+                                            android.content.Intent(
+                                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                                android.net.Uri.fromParts("package", context.packageName, null)
+                                            )
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Open TapRelay App info") }
                         }
                         Text(
                             "Let a mapped button fire while you are in another app, on the home " +

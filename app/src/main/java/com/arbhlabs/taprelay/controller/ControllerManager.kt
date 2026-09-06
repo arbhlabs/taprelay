@@ -35,6 +35,12 @@ class ControllerManager(
     private val triggerRouter: TriggerRouter,
     private val haptics: HapticsManager,
     var onFeedback: ((TapFeedback) -> Unit)? = null,
+    /**
+     * Called with a button's label when a decoded press matched no active mapping. The global
+     * accessibility service uses it to tell a tester "delivered, but nothing is mapped here"
+     * instead of the press silently doing nothing.
+     */
+    var onUnmappedInput: ((String) -> Unit)? = null,
     /** Set by whichever activity is on screen, so a button can open a surface as well as fire. */
     var presenter: ActivationPresenter? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -333,6 +339,7 @@ class ControllerManager(
                 }
             } else {
                 Log.d(TAG, "Unmapped controller input: ${input.key} (${input.label}) from $controllerName")
+                onUnmappedInput?.invoke(input.label)
             }
         }
 

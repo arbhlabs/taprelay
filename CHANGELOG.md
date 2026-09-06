@@ -1,5 +1,28 @@
 # TapRelay Changelog
 
+## v0.5.1 - 2026-09-06 (Alpha / Internal Test)
+
+Diagnosing "I enabled it and nothing happens".
+
+### Fixed
+- The accessibility service showed up in Android's list with a whole sentence as its name
+  ("Use Fire a mapped controller button from any app"). It now has a proper short label,
+  "TapRelay controller (any app)".
+- Surfaces opened by a global button press (Open item / Quick Controls activation modes) now
+  carry `FLAG_ACTIVITY_NEW_TASK`, so they actually launch from the service instead of being
+  swallowed by a silent exception.
+
+### Added
+- **The service now tells you where a press stops.** While the alpha runs, each gamepad button
+  the service receives shows a short toast: none at all means Android is not delivering gamepad
+  keys to the service on this device; "sent to TapRelay" means it was received and decoded;
+  "no mapping in TapRelay" means it arrived but nothing is mapped to that button. A one-time
+  toast on connect confirms the service bound and found the app.
+- **"Blocked by Android" state on the Controllers screen.** If the switch is on but Android never
+  started the service — the usual outcome for an app installed from outside the Play Store — the
+  card now says so and links straight to App info, with the exact steps ("Allow restricted
+  settings", then toggle off/on).
+
 ## v0.5.0 - 2026-09-06 (Alpha / Internal Test)
 
 **The controller keeps working when you leave TapRelay.** Map a button once, then use it from
