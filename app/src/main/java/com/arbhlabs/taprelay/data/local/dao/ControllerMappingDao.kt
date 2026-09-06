@@ -20,6 +20,14 @@ interface ControllerMappingDao {
     @Query("SELECT * FROM controller_mappings WHERE (controllerDescriptor = :descriptor OR controllerDescriptor = '*') AND inputKey = :inputKey AND enabled = 1 LIMIT 1")
     suspend fun findActiveMapping(descriptor: String, inputKey: String): ControllerMappingEntity?
 
+    /**
+     * Distinct enabled input keys (single buttons and chords like "BUTTON_L1+BUTTON_A"). Read
+     * synchronously off the main thread by the LastDose hand-off provider so LastDose can skip a
+     * cross-process call for a button nobody mapped. Not a Flow: the caller re-reads on resume.
+     */
+    @Query("SELECT DISTINCT inputKey FROM controller_mappings WHERE enabled = 1")
+    fun activeInputKeysBlocking(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(mapping: ControllerMappingEntity): Long
 

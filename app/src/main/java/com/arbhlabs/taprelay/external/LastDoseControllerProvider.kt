@@ -16,7 +16,19 @@ class LastDoseControllerProvider : ContentProvider() {
     override fun onCreate() = true
 
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle {
-        if (callingPackage != LASTDOSE_PACKAGE || method != METHOD_FORWARD) throw SecurityException("Not permitted")
+        if (callingPackage != LASTDOSE_PACKAGE) throw SecurityException("Not permitted")
+
+        if (method == METHOD_LIST_INPUTS) {
+            // Lets LastDose cache which inputs are worth forwarding, so an unmapped button never
+            // makes a cross-process call and a mapped one fires even on a TapRelay cold start.
+            val keys = runCatching {
+                (context?.applicationContext as? TapRelayApplication)
+                    ?.services?.controllerMappingDao?.activeInputKeysBlocking().orEmpty()
+            }.getOrDefault(emptyList())
+            return Bundle().apply { putStringArrayList(KEY_INPUTS, ArrayList(keys)) }
+        }
+
+        if (method != METHOD_FORWARD) throw SecurityException("Not permitted")
         val key = extras?.getString(KEY_INPUT).orEmpty()
         val descriptor = extras?.getString(KEY_DESCRIPTOR).orEmpty().ifBlank { "*" }
         val name = extras?.getString(KEY_NAME).orEmpty().ifBlank { "Gamepad" }
@@ -35,6 +47,8 @@ class LastDoseControllerProvider : ContentProvider() {
     companion object {
         const val AUTHORITY = "com.arbhlabs.taprelay.aod_controller"
         const val METHOD_FORWARD = "forward_controller_press"
+        const val METHOD_LIST_INPUTS = "list_mapped_inputs"
+        const val KEY_INPUTS = "inputs"
         const val KEY_INPUT = "input"
         const val KEY_DESCRIPTOR = "descriptor"
         const val KEY_NAME = "name"

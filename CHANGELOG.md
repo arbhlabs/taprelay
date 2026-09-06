@@ -1,5 +1,34 @@
 # TapRelay Changelog
 
+## v0.5.0 - 2026-09-06 (Alpha / Internal Test)
+
+**The controller keeps working when you leave TapRelay.** Map a button once, then use it from
+another app, the home screen, or with the screen off — TapRelay and LastDose no longer have to
+be the app in front.
+
+### Added
+- **Use controller in any app.** A new opt-in accessibility service (Controllers & Remotes →
+  "Use controller in any app") lets a mapped button fire globally. You grant one accessibility
+  permission; nothing runs until you do, and TapRelay only ever sees the buttons you mapped —
+  no screen content, no activity tracking.
+  - Works with the face buttons (A/B/X/Y), bumpers (LB/RB), stick clicks (L3/R3) and Menu/View.
+  - The D-pad and analog triggers stay in-app only: Android never delivers those to an
+    accessibility service.
+  - A button mapped here is consumed, so it won't also act in the app you're using.
+
+### Changed
+- LastDose no longer needs its always-on screen in front to hand a controller press to TapRelay
+  when the global service is on — the press is caught before any app sees it.
+- New `list_mapped_inputs` method on the LastDose hand-off provider: LastDose 7.2.0 uses it to
+  skip a cross-process call for a button nobody mapped and to fire a mapped one even on a cold
+  start. Still caller-pinned to `com.lastdose.app`; exposes only the input names, nothing else.
+- Controllers & Remotes screen: the old "TapRelay will not do that" note is replaced by the
+  opt-in card above; Remote Mode stays the zero-setup option.
+
+### Fixed
+- The input-device listener is now reference-counted, so opening and closing the TapRelay app no
+  longer blinds a running Remote Mode or the global service to controller connect/disconnect.
+
 ## v0.4.0 - 2026-09-06 (Alpha / Internal Test)
 
 **Useful with just a phone.** You no longer need a smart bulb to get value from a controller

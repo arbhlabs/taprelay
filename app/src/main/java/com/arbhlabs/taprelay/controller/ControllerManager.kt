@@ -74,9 +74,19 @@ class ControllerManager(
         const val TAG = "TapRelayController"
     }
 
+    /**
+     * How many components (the foreground activity, Remote Mode, the always-app accessibility
+     * service) currently want device tracking. The [InputManager] listener is registered on the
+     * first and unregistered on the last, so an activity pausing never blinds a still-running
+     * accessibility service.
+     */
+    private var listenerRefCount = 0
+
     fun startListening() {
         try {
-            inputManager.registerInputDeviceListener(this, Handler(Looper.getMainLooper()))
+            if (listenerRefCount++ == 0) {
+                inputManager.registerInputDeviceListener(this, Handler(Looper.getMainLooper()))
+            }
             refreshConnectedControllers()
         } catch (e: Exception) {
             Log.w(TAG, "Could not register InputDeviceListener", e)
@@ -85,7 +95,9 @@ class ControllerManager(
 
     fun stopListening() {
         try {
-            inputManager.unregisterInputDeviceListener(this)
+            if (listenerRefCount > 0 && --listenerRefCount == 0) {
+                inputManager.unregisterInputDeviceListener(this)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Error unregistering InputDeviceListener", e)
         }

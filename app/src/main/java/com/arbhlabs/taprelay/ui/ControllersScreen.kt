@@ -210,7 +210,74 @@ fun ControllersScreen(
                 }
             }
 
-            // 2. Remote Mode - the closest Android allows to using the pad without the app.
+            // 2. Controller in any app - opt-in accessibility service.
+            item {
+                val context = LocalContext.current
+                var enabled by remember {
+                    mutableStateOf(
+                        com.arbhlabs.taprelay.controller.GlobalControllerService.isEnabledInSettings(context)
+                    )
+                }
+                // The switch is flipped in Android's own settings screen, so re-check while this
+                // card is shown rather than waiting for something to invalidate composition.
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        enabled = com.arbhlabs.taprelay.controller.GlobalControllerService
+                            .isEnabledInSettings(context)
+                        kotlinx.coroutines.delay(1500)
+                    }
+                }
+
+                ElevatedCard(
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Use controller in any app",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (enabled) {
+                                Box(Modifier.size(8.dp).background(Color(0xFF4CAF50), CircleShape))
+                                Text("On", style = MaterialTheme.typography.labelMedium, color = Color(0xFF4CAF50))
+                            }
+                        }
+                        Text(
+                            "Let a mapped button fire while you are in another app, on the home " +
+                                "screen, or with the screen off. TapRelay only sees the buttons you " +
+                                "map — not screen content, not what you do.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "Needs an accessibility permission you grant once. Works with the face " +
+                                "buttons, bumpers, stick clicks and Menu / View; the D-pad and " +
+                                "triggers stay in-app only. A button used here won't also act in the " +
+                                "app in front.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        FilledTonalButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.SportsEsports, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (enabled) "Open Accessibility settings" else "Enable in Accessibility settings")
+                        }
+                    }
+                }
+            }
+
+            // 3. Remote Mode - the zero-setup way to dock the phone and drive it.
             item {
                 val context = LocalContext.current
                 ElevatedCard(
@@ -225,18 +292,11 @@ fun ControllersScreen(
                         )
                         Text(
                             "A dimmed, always-awake screen that shows over your lock screen, so the " +
-                                "phone can sit on a desk and the controller just works. Add the " +
-                                "\"TapRelay Remote\" tile to Quick Settings to get here from anywhere " +
-                                "without opening the app.",
+                                "phone can sit on a desk and the controller just works — no " +
+                                "permission needed. Add the \"TapRelay Remote\" tile to Quick " +
+                                "Settings to get here from anywhere without opening the app.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            "Android delivers game-controller buttons only to the app that is in " +
-                                "front, so no app can read your pad from the background without an " +
-                                "accessibility service. TapRelay will not do that.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
                         )
                         FilledTonalButton(
                             onClick = { context.startActivity(RemoteModeActivity.intent(context)) },

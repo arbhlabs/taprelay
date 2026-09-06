@@ -57,10 +57,28 @@
             android:exported="true" />
 
         <!--
+            Controller-in-any-app. An opt-in accessibility service is the only way Android lets a
+            mapped gamepad button fire from outside the focused window. flagRequestFilterKeyEvents
+            routes key events here first; no window content is read. Nothing runs until the owner
+            enables it in Accessibility settings. Remote Mode below stays the zero-setup option.
+        -->
+        <service
+            android:name=".controller.GlobalControllerService"
+            android:exported="false"
+            android:label="@string/global_controller_a11y_summary"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/global_controller_service" />
+        </service>
+
+        <!--
             Remote Mode. Shows over the lock screen and wakes the display so the phone can sit
-            docked and be driven by a game controller. Android delivers controller input only to
-            the focused window, so this is a normal foreground activity - no overlay permission
-            and no accessibility service.
+            docked and be driven by a game controller. A normal foreground activity - no overlay
+            permission and no accessibility service needed to use it.
         -->
         <activity
             android:name=".ui.remote.RemoteModeActivity"
