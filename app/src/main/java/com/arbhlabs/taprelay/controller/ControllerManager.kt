@@ -43,6 +43,13 @@ class ControllerManager(
     private val inputManager = context.getSystemService(Context.INPUT_SERVICE) as InputManager
     private val processor = ControllerInputProcessor()
 
+    /**
+     * Key codes whose DOWN this manager consumed. The matching UP must be consumed too: Android
+     * uses a button's release to finish focus navigation or to activate the focused view, so
+     * letting the UP through would let a bound button also click whatever is under it.
+     */
+    private val consumedDownKeys = HashSet<Int>()
+
     /** Set from preferences. A pad with no motor ignores this either way. */
     @Volatile
     var rumbleEnabled: Boolean = true
@@ -94,6 +101,7 @@ class ControllerManager(
         _isLearningMode.value = false
         _capturedInput.value = null
         processor.reset()
+        consumedDownKeys.clear()
     }
 
     override fun onInputDeviceAdded(deviceId: Int) {
@@ -149,13 +157,24 @@ class ControllerManager(
             return false
         }
 
+        // A consumed DOWN keeps its UP. Otherwise Android completes a focus move or a click in
+        // whatever is underneath when the button is released. Still let the processor see the UP
+        // so its modifier bookkeeping stays in sync.
+        if (event.action == KeyEvent.ACTION_UP) {
+            val ownedUp = consumedDownKeys.remove(event.keyCode)
+            processor.processKeyEvent(event)
+            return ownedUp || _isLearningMode.value
+        }
+
         // While learning, swallow every controller key - including the ups and repeats the
         // processor ignores - so the press assigns a button instead of moving system focus.
         val input = processor.processKeyEvent(event) ?: return _isLearningMode.value
         val activeDev = _connectedControllers.value.firstOrNull()
         val descriptor = event.device?.descriptor?.ifBlank { activeDev?.descriptor ?: "*" } ?: activeDev?.descriptor ?: "*"
         val controllerName = event.device?.name?.ifBlank { activeDev?.name ?: "Gamepad" } ?: activeDev?.name ?: "Gamepad"
-        return handleInputDetected(input, descriptor, controllerName, event.deviceId)
+        val consumed = handleInputDetected(input, descriptor, controllerName, event.deviceId)
+        if (consumed && event.action == KeyEvent.ACTION_DOWN) consumedDownKeys.add(event.keyCode)
+        return consumed
     }
 
     /**

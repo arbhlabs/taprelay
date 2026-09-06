@@ -1,5 +1,32 @@
 # TapRelay Changelog
 
+## v0.4.0 - 2026-09-06 (Alpha / Internal Test)
+
+**Useful with just a phone.** You no longer need a smart bulb to get value from a controller
+button or an NFC tag.
+
+### Added
+- **My phone actions.** A trigger can now control the phone itself, with no account and no
+  permission:
+  - **Music & media** — Play / pause, Next track, Previous track. Goes through Android's media
+    controls, so one button pauses whatever is playing: Spotify, YouTube Music, a podcast.
+  - **Volume** — Up, Down, Mute / unmute, with the system volume panel shown.
+  - **Flashlight** — On, Off, or Toggle, using the rear torch.
+  Do Not Disturb moved under the same "My phone" action and still asks for its one system switch.
+- **Web request presets.** The Web request editor now starts from ntfy, Discord, or Home Assistant
+  webhook, each with the address shape, method and an example message filled in, plus one line on
+  where to get the URL. "Something else" keeps the blank form. Secrets still go through the
+  encrypted Key field and are never logged.
+
+### Notes
+- Media and torch actions fail gracefully: "nothing is playing" is reported, not hidden, and a
+  phone with no flashlight says so.
+- No new permissions in the manifest. No database migration — existing tags, mappings, Magic
+  Actions and stored config are untouched.
+- Every new action is an ordinary TapRelay item: it works from a controller button, an NFC tag,
+  a place, the always-on face, a widget and inside a Magic Action, and carries its own Haptic
+  Signature.
+
 ## v0.3.1 - 2026-09-06 (Alpha / Internal Test)
 
 - **ARBH Labs HapticSignatures.** Completed actions now use a stable tactile language: LastDose

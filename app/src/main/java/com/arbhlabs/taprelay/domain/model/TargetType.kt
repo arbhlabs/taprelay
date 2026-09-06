@@ -45,17 +45,62 @@ enum class TargetType {
  * The phone-side actions a [TargetType.PHONE] item can perform, stored in the item's `deviceId`
  * the same way a LastDose item stores its log id there.
  *
- * Only actions Android grants an ordinary app through a documented, user-granted permission are
- * here. Nothing needs an accessibility service or a hidden API.
+ * Every action here works on an ordinary phone with no smart-home account, no API key and no
+ * accessibility service. Media and volume go through Android's own `AudioManager`, so they reach
+ * whichever app is playing - Spotify, YouTube Music, a podcast player - without TapRelay knowing
+ * any of them exist. The torch goes through `CameraManager`. Do Not Disturb is the one that needs
+ * a switch, and Android makes the owner grant it once in system settings.
  */
 object PhoneAction {
+    // Media - dispatched as media-button key events to the active media session.
+    const val MEDIA_PLAY_PAUSE = "media_play_pause"
+    const val MEDIA_NEXT = "media_next"
+    const val MEDIA_PREVIOUS = "media_previous"
+
+    // Volume - the music stream, with the system volume panel shown.
+    const val VOLUME_UP = "volume_up"
+    const val VOLUME_DOWN = "volume_down"
+    const val VOLUME_MUTE_TOGGLE = "volume_mute_toggle"
+
+    // Torch - the rear flashlight.
+    const val FLASHLIGHT_ON = "flashlight_on"
+    const val FLASHLIGHT_OFF = "flashlight_off"
+    const val FLASHLIGHT_TOGGLE = "flashlight_toggle"
+
+    // Do Not Disturb - needs Notification Policy Access.
     const val DND_ON = "dnd_on"
     const val DND_OFF = "dnd_off"
     const val DND_TOGGLE = "dnd_toggle"
 
-    val ALL = listOf(DND_ON, DND_OFF, DND_TOGGLE)
+    /** Ordered for the picker: the no-permission actions first, Do Not Disturb last. */
+    val ALL = listOf(
+        MEDIA_PLAY_PAUSE, MEDIA_NEXT, MEDIA_PREVIOUS,
+        VOLUME_UP, VOLUME_DOWN, VOLUME_MUTE_TOGGLE,
+        FLASHLIGHT_TOGGLE, FLASHLIGHT_ON, FLASHLIGHT_OFF,
+        DND_ON, DND_OFF, DND_TOGGLE
+    )
+
+    /** The picker groups the actions under these headings, in this order. */
+    val CATEGORIES: List<Pair<String, List<String>>> = listOf(
+        "Music & media" to listOf(MEDIA_PLAY_PAUSE, MEDIA_NEXT, MEDIA_PREVIOUS),
+        "Volume" to listOf(VOLUME_UP, VOLUME_DOWN, VOLUME_MUTE_TOGGLE),
+        "Flashlight" to listOf(FLASHLIGHT_TOGGLE, FLASHLIGHT_ON, FLASHLIGHT_OFF),
+        "Do Not Disturb" to listOf(DND_ON, DND_OFF, DND_TOGGLE)
+    )
+
+    /** True when Android will make the owner grant a switch before this action can run. */
+    fun needsDndAccess(key: String): Boolean = key in setOf(DND_ON, DND_OFF, DND_TOGGLE)
 
     fun label(key: String): String = when (key) {
+        MEDIA_PLAY_PAUSE -> "Play / pause"
+        MEDIA_NEXT -> "Next track"
+        MEDIA_PREVIOUS -> "Previous track"
+        VOLUME_UP -> "Volume up"
+        VOLUME_DOWN -> "Volume down"
+        VOLUME_MUTE_TOGGLE -> "Mute / unmute"
+        FLASHLIGHT_ON -> "Flashlight on"
+        FLASHLIGHT_OFF -> "Flashlight off"
+        FLASHLIGHT_TOGGLE -> "Flashlight toggle"
         DND_ON -> "Do Not Disturb on"
         DND_OFF -> "Do Not Disturb off"
         DND_TOGGLE -> "Do Not Disturb toggle"

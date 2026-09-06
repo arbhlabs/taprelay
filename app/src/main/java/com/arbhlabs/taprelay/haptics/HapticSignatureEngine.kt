@@ -109,8 +109,9 @@ class HapticSignatureEngine(
             tag.isLastDose -> HapticTransition.LOG
             outcome.summary.substringAfterLast('•').trim().startsWith("On", true) -> HapticTransition.ON
             outcome.summary.substringAfterLast('•').trim().startsWith("Off", true) -> HapticTransition.OFF
-            tag.isPhone && tag.deviceId == PhoneAction.DND_ON -> HapticTransition.ON
-            tag.isPhone && tag.deviceId == PhoneAction.DND_OFF -> HapticTransition.OFF
+            tag.isPhone && tag.deviceId in setOf(PhoneAction.DND_ON, PhoneAction.FLASHLIGHT_ON, PhoneAction.VOLUME_UP) -> HapticTransition.ON
+            tag.isPhone && tag.deviceId in setOf(PhoneAction.DND_OFF, PhoneAction.FLASHLIGHT_OFF, PhoneAction.VOLUME_DOWN) -> HapticTransition.OFF
+            tag.isPhone && tag.deviceId in setOf(PhoneAction.DND_TOGGLE, PhoneAction.FLASHLIGHT_TOGGLE, PhoneAction.VOLUME_MUTE_TOGGLE) -> HapticTransition.TOGGLE
             tag.actionType == ActionType.TOGGLE -> HapticTransition.TOGGLE
             else -> HapticTransition.OTHER
         }

@@ -222,8 +222,8 @@ fun ActionsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                 }
                 NewActionRow(
                     icon = Icons.Default.DoNotDisturbOn,
-                    title = "Do Not Disturb",
-                    subtitle = "Quieten the phone, alarms still ring"
+                    title = "My phone",
+                    subtitle = "Play/pause, next, volume, flashlight, Do Not Disturb"
                 ) {
                     showNewSheet = false
                     editing = Editing.Phone(null)

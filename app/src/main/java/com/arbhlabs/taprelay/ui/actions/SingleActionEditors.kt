@@ -276,7 +276,7 @@ fun OpenEditor(vm: TapRelayViewModel, existing: TagEntity?, onDone: () -> Unit) 
     }
 }
 
-// ------------------------------------------------------------------ Do Not Disturb
+// ------------------------------------------------------------------ My phone (media, volume, torch, DND)
 
 @Composable
 fun PhoneEditor(vm: TapRelayViewModel, existing: TagEntity?, onDone: () -> Unit) {
@@ -284,14 +284,17 @@ fun PhoneEditor(vm: TapRelayViewModel, existing: TagEntity?, onDone: () -> Unit)
 
     var name by remember { mutableStateOf(existing?.friendlyName.orEmpty()) }
     var iconKey by remember { mutableStateOf(existing?.iconKey ?: "switch") }
-    var action by remember { mutableStateOf(existing?.deviceId?.ifBlank { PhoneAction.DND_ON } ?: PhoneAction.DND_ON) }
+    var action by remember {
+        mutableStateOf(existing?.deviceId?.ifBlank { PhoneAction.MEDIA_PLAY_PAUSE } ?: PhoneAction.MEDIA_PLAY_PAUSE)
+    }
     var granted by remember { mutableStateOf(vm.hasDndAccess()) }
+    val needsDnd = PhoneAction.needsDndAccess(action)
 
     // The switch is granted in system settings, so it can change while this screen is open.
     LaunchedEffect(Unit) { granted = vm.hasDndAccess() }
 
     EditorScaffold(
-        title = if (existing == null) "Do Not Disturb" else "Do Not Disturb",
+        title = if (existing == null) "My phone" else "My phone",
         existing = existing,
         canSave = name.isNotBlank(),
         saveLabel = if (existing == null) "Save" else "Save changes",
@@ -303,7 +306,46 @@ fun PhoneEditor(vm: TapRelayViewModel, existing: TagEntity?, onDone: () -> Unit)
         onDelete = existing?.let { { vm.deleteItem(it) } },
         onDone = onDone
     ) {
-        if (!granted) {
+        item {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name") },
+                placeholder = { Text(PhoneAction.label(action)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        item { IconRow(iconKey) { iconKey = it } }
+
+        PhoneAction.CATEGORIES.forEach { (heading, keys) ->
+            item(key = "head-$heading") {
+                Text(
+                    heading,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            items(keys, key = { it }) { key ->
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    onClick = { action = key; if (name.isBlank()) name = PhoneAction.label(key) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(PhoneAction.label(key), Modifier.weight(1f))
+                        RadioButton(selected = action == key, onClick = { action = key })
+                    }
+                }
+            }
+        }
+
+        if (needsDnd && !granted) {
             item {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -326,42 +368,17 @@ fun PhoneEditor(vm: TapRelayViewModel, existing: TagEntity?, onDone: () -> Unit)
             }
         }
         item {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Name") },
-                placeholder = { Text(PhoneAction.label(action)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        item { IconRow(iconKey) { iconKey = it } }
-        item {
             Text(
-                "What it does",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        items(PhoneAction.ALL, key = { it }) { key ->
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                onClick = { action = key; if (name.isBlank()) name = PhoneAction.label(key) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(PhoneAction.label(key), Modifier.weight(1f))
-                    RadioButton(selected = action == key, onClick = { action = key })
-                }
-            }
-        }
-        item {
-            Text(
-                "Alarms still ring. TapRelay uses the priority setting rather than total silence.",
+                when {
+                    needsDnd ->
+                        "Alarms still ring. TapRelay uses the priority setting rather than total silence."
+                    action.startsWith("media_") ->
+                        "Goes to whatever is playing — Spotify, YouTube Music, a podcast. No account needed."
+                    action.startsWith("flashlight_") ->
+                        "Uses the rear flashlight. Needs no permission."
+                    else ->
+                        "Changes the media volume and shows the system volume panel. Needs no permission."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -383,6 +400,7 @@ fun WebRequestEditor(vm: TapRelayViewModel, existing: TagEntity?, onDone: () -> 
         )
     }
     var body by remember { mutableStateOf(existing?.webhookBody.orEmpty()) }
+    var presetHelp by remember { mutableStateOf("") }
     var secretHeader by remember { mutableStateOf(existing?.webhookSecretHeader.orEmpty()) }
     var secretValue by remember { mutableStateOf("") }
     var hasStoredSecret by remember { mutableStateOf(false) }
@@ -423,6 +441,41 @@ fun WebRequestEditor(vm: TapRelayViewModel, existing: TagEntity?, onDone: () -> 
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+        if (existing == null) {
+            item {
+                Text(
+                    "Start from",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.arbhlabs.taprelay.domain.model.WebhookPreset.ALL.forEach { preset ->
+                        FilterChip(
+                            selected = presetHelp == preset.help,
+                            onClick = {
+                                method = preset.method
+                                if (url.isBlank()) url = preset.urlHint.takeIf { it != "https://" }.orEmpty()
+                                if (body.isBlank()) body = preset.bodyTemplate
+                                if (name.isBlank()) name = preset.label
+                                presetHelp = preset.help
+                            },
+                            label = { Text(preset.label) }
+                        )
+                    }
+                }
+            }
+            if (presetHelp.isNotBlank()) {
+                item {
+                    Text(
+                        presetHelp,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
         item {
             OutlinedTextField(

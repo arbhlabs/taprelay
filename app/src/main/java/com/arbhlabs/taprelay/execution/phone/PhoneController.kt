@@ -3,21 +3,60 @@ package com.arbhlabs.taprelay.execution.phone
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
 import android.provider.Settings
+import android.view.KeyEvent
 import com.arbhlabs.taprelay.domain.model.PhoneAction
 
 /**
- * Phone-side actions, which today means Do Not Disturb.
+ * Phone-side actions that work on a phone with nothing else attached to it.
  *
- * Android gates this behind Notification Policy Access - a switch the owner grants once in system
- * settings. There is no way around that and no reason to want one: an app that could silence a
- * phone without asking is exactly what the permission exists to prevent. When access has not been
- * granted the action fails with copy that says what to do, rather than silently doing nothing.
+ * Media and volume go through [AudioManager], which routes a media-button press to whatever app is
+ * currently playing - so one controller button pauses Spotify, YouTube Music or a podcast without
+ * TapRelay integrating with any of them. The torch goes through [CameraManager]. None of these
+ * needs a permission or an account.
+ *
+ * Do Not Disturb is the exception: Android gates it behind Notification Policy Access, a switch the
+ * owner grants once in system settings. When it has not been granted the action fails with copy
+ * that says what to do, rather than silently doing nothing.
  */
 class PhoneController(private val context: Context) {
 
     private val notifications: NotificationManager?
         get() = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+
+    private val audio: AudioManager?
+        get() = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+    private val cameras: CameraManager?
+        get() = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+
+    // The torch has no "read current state" call, so we follow it. Registered lazily and kept for
+    // the process lifetime; the callback is cheap and there is only ever one PhoneController.
+    @Volatile private var torchOn = false
+    private var torchCallbackRegistered = false
+    private val torchCallback = object : CameraManager.TorchCallback() {
+        override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
+            if (cameraId == torchCameraId) torchOn = enabled
+        }
+    }
+
+    private val torchCameraId: String? by lazy {
+        runCatching {
+            val cm = cameras ?: return@runCatching null
+            cm.cameraIdList.firstOrNull { id ->
+                val c = cm.getCameraCharacteristics(id)
+                c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true &&
+                    c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+            } ?: cm.cameraIdList.firstOrNull { id ->
+                cm.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            }
+        }.getOrNull()
+    }
+
+    // ---- Do Not Disturb -------------------------------------------------------------------
 
     val hasDndAccess: Boolean
         get() = notifications?.isNotificationPolicyAccessGranted == true
@@ -34,11 +73,90 @@ class PhoneController(private val context: Context) {
             filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN
     }
 
-    fun run(action: String): PhoneResult {
-        val manager = notifications ?: return PhoneResult.Failed("This phone can't do that.")
-        if (!manager.isNotificationPolicyAccessGranted) {
-            return PhoneResult.NeedsPermission
+    fun run(action: String): PhoneResult = when (action) {
+        PhoneAction.MEDIA_PLAY_PAUSE -> media(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, "Play / pause sent")
+        PhoneAction.MEDIA_NEXT -> media(KeyEvent.KEYCODE_MEDIA_NEXT, "Skipped forward")
+        PhoneAction.MEDIA_PREVIOUS -> media(KeyEvent.KEYCODE_MEDIA_PREVIOUS, "Skipped back")
+        PhoneAction.VOLUME_UP -> volume(AudioManager.ADJUST_RAISE, "Volume up")
+        PhoneAction.VOLUME_DOWN -> volume(AudioManager.ADJUST_LOWER, "Volume down")
+        PhoneAction.VOLUME_MUTE_TOGGLE -> volume(AudioManager.ADJUST_TOGGLE_MUTE, "Mute toggled")
+        PhoneAction.FLASHLIGHT_ON -> torch(TorchIntent.ON)
+        PhoneAction.FLASHLIGHT_OFF -> torch(TorchIntent.OFF)
+        PhoneAction.FLASHLIGHT_TOGGLE -> torch(TorchIntent.TOGGLE)
+        PhoneAction.DND_ON, PhoneAction.DND_OFF, PhoneAction.DND_TOGGLE -> dnd(action)
+        else -> PhoneResult.Failed("That phone action is no longer available.")
+    }
+
+    // ---- Media --------------------------------------------------------------------------
+
+    private fun media(keyCode: Int, successCopy: String): PhoneResult {
+        val am = audio ?: return PhoneResult.Failed("This phone can't do that.")
+        return try {
+            val now = android.os.SystemClock.uptimeMillis()
+            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
+            // The event is delivered whether or not anything is listening; only the copy changes.
+            val playing = runCatching { am.isMusicActive }.getOrDefault(false)
+            PhoneResult.Done(
+                if (playing || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) successCopy
+                else "$successCopy · nothing is playing"
+            )
+        } catch (e: Exception) {
+            PhoneResult.Failed("Couldn't reach your media player.")
         }
+    }
+
+    // ---- Volume ------------------------------------------------------------------------
+
+    private fun volume(direction: Int, successCopy: String): PhoneResult {
+        val am = audio ?: return PhoneResult.Failed("This phone can't do that.")
+        return try {
+            am.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+            PhoneResult.Done(successCopy)
+        } catch (e: SecurityException) {
+            // A fixed-volume device (some TVs, docked modes) refuses stream changes.
+            PhoneResult.Failed("This phone won't let an app change the volume here.")
+        } catch (e: Exception) {
+            PhoneResult.Failed("Couldn't change the volume.")
+        }
+    }
+
+    // ---- Torch ------------------------------------------------------------------------
+
+    private enum class TorchIntent { ON, OFF, TOGGLE }
+
+    private fun torch(intent: TorchIntent): PhoneResult {
+        val cm = cameras ?: return PhoneResult.Failed("This phone has no flashlight.")
+        val id = torchCameraId ?: return PhoneResult.Failed("This phone has no flashlight.")
+        ensureTorchCallback(cm)
+        val target = when (intent) {
+            TorchIntent.ON -> true
+            TorchIntent.OFF -> false
+            TorchIntent.TOGGLE -> !torchOn
+        }
+        return try {
+            cm.setTorchMode(id, target)
+            torchOn = target
+            PhoneResult.Done(if (target) "Flashlight on" else "Flashlight off")
+        } catch (e: Exception) {
+            // In use by the camera app, or the torch is unavailable right now.
+            PhoneResult.Failed("The flashlight is busy right now.")
+        }
+    }
+
+    private fun ensureTorchCallback(cm: CameraManager) {
+        if (torchCallbackRegistered) return
+        runCatching {
+            cm.registerTorchCallback(torchCallback, null)
+            torchCallbackRegistered = true
+        }
+    }
+
+    // ---- Do Not Disturb ---------------------------------------------------------------
+
+    private fun dnd(action: String): PhoneResult {
+        val manager = notifications ?: return PhoneResult.Failed("This phone can't do that.")
+        if (!manager.isNotificationPolicyAccessGranted) return PhoneResult.NeedsPermission
         val turnOn = when (action) {
             PhoneAction.DND_ON -> true
             PhoneAction.DND_OFF -> false

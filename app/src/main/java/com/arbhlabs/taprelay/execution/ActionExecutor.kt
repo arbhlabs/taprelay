@@ -412,7 +412,7 @@ class ActionExecutor(
                 finishSuccess(tag, PHONE_PROVIDER_ID, startTime, silent, onFeedback, result.summary, result.summary)
             PhoneResult.NeedsPermission -> finishFailure(
                 tag, PHONE_PROVIDER_ID, startTime, silent, onFeedback,
-                "TapRelay needs Do Not Disturb access. Turn it on in Settings."
+                "TapRelay needs Do Not Disturb access. Turn it on in TapRelay → this action."
             )
             is PhoneResult.Failed ->
                 finishFailure(tag, PHONE_PROVIDER_ID, startTime, silent, onFeedback, result.message)
