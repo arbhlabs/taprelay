@@ -26,6 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -48,6 +49,34 @@ class ControllerManager(
 
     private val inputManager = context.getSystemService(Context.INPUT_SERVICE) as InputManager
     private val processor = ControllerInputProcessor()
+
+    /**
+     * Every enabled mapping's input key, kept live from the database. The global accessibility
+     * service uses it to decide *synchronously* whether to swallow a press: a button nobody has
+     * mapped passes straight through to the app in front, so the service never steals a button a
+     * game or another app needs. Empty until the first DB emission.
+     */
+    @Volatile
+    private var mappedInputKeys: Set<String> = emptySet()
+
+    init {
+        scope.launch {
+            mappingDao.observeAll().collectLatest { rows ->
+                mappedInputKeys = rows.asSequence()
+                    .filter { it.enabled }
+                    .map { it.inputKey }
+                    .toSet()
+            }
+        }
+    }
+
+    /** True if this exact input, or a chord that contains it, is a live mapping. */
+    fun isInputMapped(inputKey: String): Boolean {
+        val keys = mappedInputKeys
+        if (keys.isEmpty()) return false
+        if (inputKey in keys) return true
+        return keys.any { it.contains('+') && it.split('+').contains(inputKey) }
+    }
 
     /**
      * Key codes whose DOWN this manager consumed. The matching UP must be consumed too: Android
@@ -161,10 +190,14 @@ class ControllerManager(
     }
 
     /**
-     * Called from Activity.dispatchKeyEvent.
+     * Called from Activity.dispatchKeyEvent, and from the global accessibility service.
      * Returns true if event was consumed.
+     *
+     * [consumeUnmapped] is true for an on-screen activity - swallowing a stray controller key
+     * there just stops focus drifting. The global service passes false: a button with no mapping
+     * must reach whatever app is in front, untouched.
      */
-    fun handleKeyEvent(event: KeyEvent): Boolean {
+    fun handleKeyEvent(event: KeyEvent, consumeUnmapped: Boolean = true): Boolean {
         val isGamepadKey = com.arbhlabs.taprelay.controller.model.ControllerKeys.isGamepadSpecificKey(event.keyCode)
         val isControllerSource = ControllerInputProcessor.isGameControllerEvent(event.source, event.device)
         val hasControllerAttached = _connectedControllers.value.isNotEmpty()
@@ -181,15 +214,22 @@ class ControllerManager(
         if (event.action == KeyEvent.ACTION_UP) {
             val ownedUp = consumedDownKeys.remove(event.keyCode)
             processor.processKeyEvent(event)
-            return ownedUp || _isLearningMode.value
+            return ownedUp || (_isLearningMode.value && consumeUnmapped)
         }
 
         // While learning, swallow every controller key - including the ups and repeats the
         // processor ignores - so the press assigns a button instead of moving system focus.
-        val input = processor.processKeyEvent(event) ?: return _isLearningMode.value
+        val input = processor.processKeyEvent(event)
+            ?: return _isLearningMode.value && consumeUnmapped
         val activeDev = _connectedControllers.value.firstOrNull()
         val descriptor = event.device?.descriptor?.ifBlank { activeDev?.descriptor ?: "*" } ?: activeDev?.descriptor ?: "*"
         val controllerName = event.device?.name?.ifBlank { activeDev?.name ?: "Gamepad" } ?: activeDev?.name ?: "Gamepad"
+        // The global service must not steal a button nobody mapped: let it fall through to the app.
+        if (!consumeUnmapped && !_isLearningMode.value && !isInputMapped(input.key)) {
+            _lastInput.value = input to System.currentTimeMillis()
+            onUnmappedInput?.invoke(input.label)
+            return false
+        }
         val consumed = handleInputDetected(input, descriptor, controllerName, event.deviceId)
         if (consumed && event.action == KeyEvent.ACTION_DOWN) consumedDownKeys.add(event.keyCode)
         return consumed

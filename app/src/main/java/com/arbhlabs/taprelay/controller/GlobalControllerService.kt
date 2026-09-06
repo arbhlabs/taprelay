@@ -33,10 +33,9 @@ import com.arbhlabs.taprelay.ui.quick.QuickControlsActivity
  *  - Entirely opt-in: nothing here runs until the owner enables the service in Android's
  *    Accessibility settings.
  *
- * While this is an alpha, every gamepad key the service receives is echoed as a short toast so a
- * tester can see exactly where a press stops: no toast at all = Android is not delivering gamepad
- * keys to the service on this device; "sent to TapRelay" = delivered and decoded; "no mapping" =
- * delivered but nothing is mapped to that button. [DIAGNOSTIC_TOASTS] gates it.
+ * Feedback is quiet by design: a one-time toast confirms the service bound, a mapped press shows
+ * its action's own result, and a press with no mapping says so once. A button nobody mapped is
+ * not consumed - it reaches the app in front untouched.
  */
 class GlobalControllerService : AccessibilityService() {
 
@@ -99,17 +98,14 @@ class GlobalControllerService : AccessibilityService() {
         manager.onFeedback = { fb -> showFeedback(fb) }
         manager.onUnmappedInput = { label -> toast("Controller: $label — no mapping in TapRelay") }
 
-        val consumed = manager.handleKeyEvent(event)
+        // consumeUnmapped = false: a button with no TapRelay mapping passes straight through to
+        // whatever app is in front, so the service never steals a game or app button.
+        val consumed = manager.handleKeyEvent(event, consumeUnmapped = false)
         Log.i(
             TAG,
             "onKeyEvent code=${event.keyCode} norm=$normalized action=${event.action} " +
                 "source=${event.source} device=${event.device?.name} consumed=$consumed"
         )
-        if (DIAGNOSTIC_TOASTS && normalized != null &&
-            event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0
-        ) {
-            toast("Controller: ${ControllerKeys.formatLabel(normalized)} → sent to TapRelay")
-        }
         return consumed
     }
 
@@ -138,9 +134,6 @@ class GlobalControllerService : AccessibilityService() {
 
     companion object {
         private const val TAG = "TapRelayGlobalCtrl"
-
-        /** Alpha aid: echo every received gamepad key as a toast so a tester can locate a break. */
-        const val DIAGNOSTIC_TOASTS = true
 
         @Volatile
         private var instance: GlobalControllerService? = null

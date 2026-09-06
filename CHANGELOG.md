@@ -1,5 +1,22 @@
 # TapRelay Changelog
 
+## v0.5.2 - 2026-09-06 (Alpha / Internal Test)
+
+Polish for the controller-in-any-app hand-off.
+
+### Changed
+- **A button with no mapping is no longer swallowed.** When the global service is on, only a
+  button you have actually mapped is consumed; anything else passes straight through to the app
+  in front, so a game or another app keeps every button you did not assign. The set of mapped
+  buttons is kept live from the database, so this stays correct as you add and remove mappings.
+- Dropped the per-press diagnostic toast from 0.5.1. Feedback is now quiet: one toast when the
+  service connects, the action's own result when a mapped button fires, and a single "no mapping"
+  note when an unmapped button is pressed.
+
+### Notes
+- Pairs with LastDose 7.2.1, which fixes the always-on face not refreshing immediately after a
+  controller-driven log.
+
 ## v0.5.1 - 2026-09-06 (Alpha / Internal Test)
 
 Diagnosing "I enabled it and nothing happens".
