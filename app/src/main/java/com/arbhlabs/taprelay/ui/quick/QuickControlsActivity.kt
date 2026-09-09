@@ -57,6 +57,7 @@ class QuickControlsActivity : ComponentActivity() {
 
         val tagId = intent.getStringExtra(EXTRA_TAG_ID)
         if (tagId.isNullOrBlank()) { finish(); return }
+        services.controllerManager.selectAutomaticLight(tagId)
         session.open(tagId)
 
         setContent {

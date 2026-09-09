@@ -221,7 +221,10 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun openItem(tagId: String) { presenter.openItem(tagId) }
-    fun openQuickControls(tagId: String) { presenter.openQuickControls(tagId) }
+    fun openQuickControls(tagId: String) {
+        services.controllerManager.selectAutomaticLight(tagId)
+        presenter.openQuickControls(tagId)
+    }
     fun closeItem() { _openItemTagId.value = null }
     fun closeQuickControls() { quickControls.close() }
 
@@ -1266,6 +1269,8 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     val connectedControllers: StateFlow<List<ControllerDevice>> =
         services.controllerManager.connectedControllers
 
+    val automaticLightControls = services.controllerManager.automaticLightControlState
+
     val isControllerLearning: StateFlow<Boolean> =
         services.controllerManager.isLearningMode
 
@@ -1373,6 +1378,7 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testControllerMapping(tagId: String) {
+        services.controllerManager.selectAutomaticLight(tagId)
         services.actionExecutor.executeByTagId(tagId) { fb -> _pill.value = fb }
     }
 }

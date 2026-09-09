@@ -1,5 +1,21 @@
 # TapRelay Changelog
 
+## v0.6.0 - 2026-09-09 (Alpha / Internal Test)
+
+### Added
+- A selected or controller-mapped smart light now gets automatic left-stick controls: vertical
+  movement adjusts brightness and horizontal movement adjusts colour when the device supports it.
+- Stick movement is analog, dead-zoned and coalesced to at most one cloud update every 400 ms.
+  Capability checks prevent colour calls to brightness-only lights and skip non-light devices.
+- Controllers & Remotes and Remote Mode show the active automatic controls and target.
+- Existing explicit mappings remain authoritative; controller discovery continues to refresh
+  automatically on connect, disconnect and device changes.
+- PC relay actions from the integration branch are included in this release.
+
+### Fixed
+- Controller light adjustments no longer require a separate manual mapping for every direction.
+- Cloud APIs receive only the newest coalesced desired state instead of every noisy stick event.
+
 ## v0.5.2 - 2026-09-06 (Alpha / Internal Test)
 
 Polish for the controller-in-any-app hand-off.

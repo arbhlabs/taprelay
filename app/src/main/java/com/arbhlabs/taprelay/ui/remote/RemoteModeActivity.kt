@@ -130,7 +130,10 @@ class RemoteModeActivity : ComponentActivity() {
 
         // Drawn in this window rather than a dialog or another activity, so the controller
         // keeps working while the surface is up.
-        override fun openQuickControls(tagId: String) = quickControls.open(tagId)
+        override fun openQuickControls(tagId: String) {
+            controllerManager.selectAutomaticLight(tagId)
+            quickControls.open(tagId)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -173,6 +176,7 @@ class RemoteModeActivity : ComponentActivity() {
                 val outcome by result.collectAsState()
                 val quick by quickControls.state.collectAsState()
                 val lastInput by controllerManager.lastInput.collectAsState()
+                val automaticControls by controllerManager.automaticLightControlState.collectAsState()
                 val dimWhenIdle by autoDim.collectAsState()
                 val aod by densityPref.collectAsState()
                 val showClock by showClockPref.collectAsState()
@@ -297,7 +301,8 @@ class RemoteModeActivity : ComponentActivity() {
                                 controllerName = controllers.firstOrNull()?.name,
                                 battery = controllers.firstOrNull()?.batteryPercent,
                                 connected = controllers.isNotEmpty(),
-                                accent = accent
+                                accent = accent,
+                                automaticControls = automaticControls.description
                             )
 
                             if (dozing) {

@@ -109,7 +109,10 @@ class MainActivity : ComponentActivity() {
     /** Shows the requested surface inside the running app. */
     private val inAppPresenter = object : ActivationPresenter {
         override fun openItem(tagId: String) = vm.openItem(tagId)
-        override fun openQuickControls(tagId: String) = vm.openQuickControls(tagId)
+        override fun openQuickControls(tagId: String) {
+            controllerManager.selectAutomaticLight(tagId)
+            vm.openQuickControls(tagId)
+        }
     }
 
     private fun handleActivationIntent(intent: Intent?) {

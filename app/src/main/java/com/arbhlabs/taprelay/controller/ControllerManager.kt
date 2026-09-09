@@ -38,6 +38,7 @@ class ControllerManager(
     private val mappingDao: ControllerMappingDao,
     private val triggerRouter: TriggerRouter,
     private val haptics: HapticsManager,
+    private val automaticLightControls: AutomaticLightControls,
     var onFeedback: ((TapFeedback) -> Unit)? = null,
     /**
      * Called with a button's label when a decoded press matched no active mapping. The global
@@ -111,6 +112,9 @@ class ControllerManager(
 
     private val _connectedControllers = MutableStateFlow<List<ControllerDevice>>(emptyList())
     val connectedControllers: StateFlow<List<ControllerDevice>> = _connectedControllers.asStateFlow()
+    val automaticLightControlState: StateFlow<AutomaticLightControlState> = automaticLightControls.state
+
+    fun selectAutomaticLight(tagId: String) = automaticLightControls.select(tagId)
 
     private val _isLearningMode = MutableStateFlow(false)
     val isLearningMode: StateFlow<Boolean> = _isLearningMode.asStateFlow()
@@ -263,10 +267,23 @@ class ControllerManager(
             return false
         }
 
+        val x = event.getAxisValue(MotionEvent.AXIS_X)
+        val y = event.getAxisValue(MotionEvent.AXIS_Y)
+        val horizontalExplicit = (x < 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_LEFT)) ||
+            (x > 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_RIGHT))
+        val verticalExplicit = (y < 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_UP)) ||
+            (y > 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_DOWN))
+        if (automaticLightControls.onAxes(
+                x = x,
+                y = y,
+                allowHorizontal = !horizontalExplicit,
+                allowVertical = !verticalExplicit
+            )) return true
+
         if (adjustmentSession.isActive()) {
             val adjustment = adjustmentSession.onStick(
-                event.getAxisValue(MotionEvent.AXIS_X),
-                event.getAxisValue(MotionEvent.AXIS_Y),
+                x,
+                y,
                 currentBrightness = 50
             )
             if (adjustment != null) {
@@ -384,6 +401,7 @@ class ControllerManager(
             }
 
             if (mapping != null) {
+                automaticLightControls.select(mapping.tagId)
                 onFeedback?.invoke(
                     TapFeedback(
                         title = "${mapping.inputLabel} → Triggering…",

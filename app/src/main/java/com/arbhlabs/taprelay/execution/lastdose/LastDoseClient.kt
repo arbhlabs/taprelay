@@ -64,6 +64,7 @@ class LastDoseClient(private val context: Context) {
         const val STATUS_LOGGED = "LOGGED"
         const val STATUS_DUPLICATE = "DUPLICATE_IGNORED"
         const val STATUS_TARGET_MISSING = "TARGET_MISSING"
+        const val STATUS_QUEUED = "QUEUED"
     }
 
     private val uri: Uri = Uri.parse("content://$AUTHORITY")
@@ -130,6 +131,10 @@ class LastDoseClient(private val context: Context) {
             STATUS_TARGET_MISSING -> LastDoseResult.Failed(
                 "That LastDose log no longer exists.",
                 LastDoseResult.Reason.TARGET_MISSING
+            )
+            STATUS_QUEUED -> LastDoseResult.Failed(
+                "LastDose queued this log and will retry in the background.",
+                LastDoseResult.Reason.UNAVAILABLE
             )
             // LastDose looked at it and did not write a row. Never dress this up as success.
             else -> LastDoseResult.Failed("LastDose couldn't save that log.", LastDoseResult.Reason.REJECTED)

@@ -26,6 +26,9 @@ import com.arbhlabs.taprelay.haptics.HapticSignatureEngine
 import com.arbhlabs.taprelay.monetization.EntitlementRepository
 import com.arbhlabs.taprelay.trigger.TriggerRouter
 import com.arbhlabs.taprelay.pc.PcRelayRegistry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /** Manual dependency container. Single instance, created in [com.arbhlabs.taprelay.TapRelayApplication]. */
 class ServiceLocator(context: Context) {
@@ -121,10 +124,18 @@ class ServiceLocator(context: Context) {
         dao = placeTriggerDao
     )
 
+    private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    val automaticLightControls = com.arbhlabs.taprelay.controller.AutomaticLightControls(
+        tags = tagRepository,
+        providers = { providers },
+        scope = controllerScope
+    )
     val controllerManager = com.arbhlabs.taprelay.controller.ControllerManager(
         context = appContext,
         mappingDao = controllerMappingDao,
         triggerRouter = triggerRouter,
-        haptics = haptics
+        haptics = haptics,
+        automaticLightControls = automaticLightControls,
+        scope = controllerScope
     )
 }

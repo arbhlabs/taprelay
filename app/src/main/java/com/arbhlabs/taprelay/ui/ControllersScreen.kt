@@ -56,6 +56,7 @@ fun ControllersScreen(
     val isLearning by vm.isControllerLearning.collectAsState()
     val capturedInput by vm.capturedControllerInput.collectAsState()
     val keepAwake by vm.keepScreenAwake.collectAsState()
+    val automaticControls by vm.automaticLightControls.collectAsState()
 
     var showAssignDialog by remember { mutableStateOf(false) }
     var mappingStep by remember { mutableStateOf(1) } // 1: Press button, 2: Pick action
@@ -205,6 +206,29 @@ fun ControllersScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            if (controllers.isNotEmpty() && automaticControls.active) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "Automatic controls • ${automaticControls.name}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                automaticControls.description.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         }
                     }
                 }

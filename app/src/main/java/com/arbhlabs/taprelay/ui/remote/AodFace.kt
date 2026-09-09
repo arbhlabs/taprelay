@@ -94,9 +94,11 @@ fun AodStatusLine(
     battery: Int?,
     connected: Boolean,
     accent: Color,
+    automaticControls: String? = null,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = modifier.fillMaxWidth()) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             "TAPRELAY",
             style = MaterialTheme.typography.labelMedium,
@@ -122,6 +124,17 @@ fun AodStatusLine(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+    if (connected && automaticControls != null) {
+        Text(
+            automaticControls,
+            style = MaterialTheme.typography.labelSmall,
+            color = accent.copy(alpha = 0.72f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().padding(top = 5.dp)
+        )
+    }
     }
 }
 
