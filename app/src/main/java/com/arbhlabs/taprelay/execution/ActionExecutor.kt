@@ -24,6 +24,9 @@ import com.arbhlabs.taprelay.execution.phone.AppLauncher
 import com.arbhlabs.taprelay.execution.phone.LaunchResult
 import com.arbhlabs.taprelay.execution.phone.PhoneController
 import com.arbhlabs.taprelay.execution.phone.PhoneResult
+import com.arbhlabs.taprelay.pc.PcRelayAction
+import com.arbhlabs.taprelay.pc.PcRelayRegistry
+import com.arbhlabs.taprelay.pc.PcRelayResult
 import com.arbhlabs.taprelay.execution.webhook.WebhookClient
 import com.arbhlabs.taprelay.execution.webhook.WebhookMethod
 import com.arbhlabs.taprelay.haptics.HapticActivationContext
@@ -45,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalTime
+import java.util.UUID
 
 data class TapFeedback(
     val title: String,
@@ -91,6 +95,7 @@ class ActionExecutor(
     private val secureStorage: SecureKeyStorage? = null,
     private val launcher: AppLauncher? = null,
     private val phone: PhoneController? = null,
+    private val pcRelay: PcRelayRegistry? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     private val lastFired = HashMap<String, Long>()
@@ -203,6 +208,7 @@ class ActionExecutor(
                 rawTag.isWebhook -> runWebhook(rawTag, startTime, silent, onFeedback)
                 rawTag.isLaunch -> runLaunch(rawTag, startTime, silent, onFeedback)
                 rawTag.isPhone -> runPhoneAction(rawTag, startTime, silent, onFeedback)
+                rawTag.isPcRelay -> runPcRelay(rawTag, startTime, silent, onFeedback)
                 else -> runDevice(rawTag, startTime, silent, onFeedback)
             }
         } finally {
@@ -214,6 +220,32 @@ class ActionExecutor(
         }
         if (depth == 0) _executions.tryEmit(outcome)
         return outcome
+    }
+
+    private suspend fun runPcRelay(
+        tag: TagEntity,
+        startTime: Long,
+        silent: Boolean,
+        onFeedback: (TapFeedback) -> Unit
+    ): TapOutcome {
+        val relay = pcRelay ?: return finishFailure(
+            tag, "windows", startTime, silent, onFeedback,
+            "Pair a Windows relay in TapRelay first."
+        )
+        if (tag.deviceId !in PcRelayAction.all) {
+            return finishFailure(tag, "windows", startTime, silent, onFeedback, "That Windows action is no longer available.")
+        }
+        if (!silent) onFeedback(TapFeedback("${tag.friendlyName} • Sending…", false, pending = true))
+        return when (val result = relay.send(tag.deviceId, eventId = "${tag.tagId}:${UUID.randomUUID()}")) {
+            is PcRelayResult.Accepted -> finishSuccess(
+                tag, "windows", startTime, silent, onFeedback,
+                result.message ?: "Sent to Windows", result.message ?: "Sent to Windows"
+            )
+            is PcRelayResult.Failed -> finishFailure(
+                tag, "windows", startTime, silent, onFeedback,
+                if (result.offline) "Windows relay is offline." else result.message
+            )
+        }
     }
 
     private fun claim(tagId: String): Boolean {

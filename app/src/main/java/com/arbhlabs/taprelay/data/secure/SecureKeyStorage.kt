@@ -29,6 +29,39 @@ class SecureKeyStorage(
     private val PRO_TIER = stringPreferencesKey("pro_tier")
     private val PRO_EXPIRES = stringPreferencesKey("pro_expires")
     private val PRO_SIG = stringPreferencesKey("pro_sig")
+    private val PC_RELAY_URL = stringPreferencesKey("pc_relay_url")
+    private val PC_RELAY_TOKEN = stringPreferencesKey("pc_relay_token")
+    private val PC_RELAY_OWNER = stringPreferencesKey("pc_relay_owner")
+
+    fun getPcRelayCredentials(): Flow<PcRelayCredentials?> =
+        context.dataStore.data.map { preferences ->
+            val url = preferences[PC_RELAY_URL] ?: return@map null
+            val token = preferences[PC_RELAY_TOKEN] ?: return@map null
+            val owner = preferences[PC_RELAY_OWNER] ?: return@map null
+            runCatching {
+                PcRelayCredentials(
+                    baseUrl = aeadManager.decrypt(url),
+                    token = aeadManager.decrypt(token),
+                    ownerId = aeadManager.decrypt(owner)
+                )
+            }.getOrNull()
+        }.flowOn(Dispatchers.IO)
+
+    suspend fun savePcRelayCredentials(credentials: PcRelayCredentials) {
+        context.dataStore.edit { preferences ->
+            preferences[PC_RELAY_URL] = aeadManager.encrypt(credentials.baseUrl)
+            preferences[PC_RELAY_TOKEN] = aeadManager.encrypt(credentials.token)
+            preferences[PC_RELAY_OWNER] = aeadManager.encrypt(credentials.ownerId)
+        }
+    }
+
+    suspend fun clearPcRelayCredentials() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(PC_RELAY_URL)
+            preferences.remove(PC_RELAY_TOKEN)
+            preferences.remove(PC_RELAY_OWNER)
+        }
+    }
 
     fun getGoveeApiKey(): Flow<String?> {
         return context.dataStore.data.map { preferences ->
@@ -238,6 +271,12 @@ data class ProLicense(
 data class HomeAssistantCredentials(
     val baseUrl: String,
     val token: String
+)
+
+data class PcRelayCredentials(
+    val baseUrl: String,
+    val token: String,
+    val ownerId: String
 )
 
 data class TuyaCredentials(

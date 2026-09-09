@@ -9,6 +9,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import com.arbhlabs.taprelay.controller.AdjustmentConfig
+import com.arbhlabs.taprelay.controller.AdjustmentStick
 
 private val Context.appPrefs by preferencesDataStore(name = "app_prefs")
 
@@ -46,6 +48,30 @@ class AppPreferences(private val context: Context) {
     private val aodShowClockKey = booleanPreferencesKey("aod_show_clock")
     private val aodConfirmKey = booleanPreferencesKey("aod_confirm_actions")
     private val aodMonochromeKey = booleanPreferencesKey("aod_monochrome")
+    private val adjustmentEnabledKey = booleanPreferencesKey("post_adjustment_enabled")
+    private val adjustmentStickKey = stringPreferencesKey("post_adjustment_stick")
+    private val adjustmentDurationKey = stringPreferencesKey("post_adjustment_duration_ms")
+    private val adjustmentDeadZoneKey = stringPreferencesKey("post_adjustment_dead_zone")
+
+    val postActivationAdjustment: Flow<AdjustmentConfig> =
+        context.appPrefs.data.map { prefs ->
+            AdjustmentConfig(
+                enabled = prefs[adjustmentEnabledKey] ?: false,
+                stick = runCatching { AdjustmentStick.valueOf(prefs[adjustmentStickKey] ?: "RIGHT") }
+                    .getOrDefault(AdjustmentStick.RIGHT),
+                durationMs = prefs[adjustmentDurationKey]?.toLongOrNull() ?: 8_000L,
+                deadZone = prefs[adjustmentDeadZoneKey]?.toFloatOrNull() ?: 0.22f
+            )
+        }
+
+    suspend fun setPostActivationAdjustment(config: AdjustmentConfig) {
+        context.appPrefs.edit {
+            it[adjustmentEnabledKey] = config.enabled
+            it[adjustmentStickKey] = config.stick.name
+            it[adjustmentDurationKey] = config.safeDurationMs.toString()
+            it[adjustmentDeadZoneKey] = config.safeDeadZone.toString()
+        }
+    }
 
     val onboardingComplete: Flow<Boolean> =
         context.appPrefs.data.map { it[onboardedKey] ?: false }

@@ -92,6 +92,9 @@ data class TagEntity(
     val isPhone: Boolean
         get() = targetType == TargetType.PHONE
 
+    val isPcRelay: Boolean
+        get() = targetType == TargetType.PC_RELAY
+
     /** True when this item is a Magic Action: several other items, in order. */
     val isMagicAction: Boolean
         get() = targetType == TargetType.MAGIC_ACTION
@@ -101,7 +104,7 @@ data class TagEntity(
      * Controls. Screens that list lamps use this to leave them out; the executor uses it to route.
      */
     val isNonDevice: Boolean
-        get() = isLastDose || isWebhook || isLaunch || isPhone || isMagicAction
+        get() = isLastDose || isWebhook || isLaunch || isPhone || isPcRelay || isMagicAction
 
     /** The steps of a Magic Action, in order. Empty for anything that is not one. */
     val magicSteps: List<ActionStep>

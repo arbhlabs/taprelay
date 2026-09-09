@@ -32,6 +32,9 @@ enum class TargetType {
     /** 0.2.1: changes something about the phone itself, such as Do Not Disturb. */
     PHONE,
 
+    /** An action delivered to the paired Windows companion, such as media control. */
+    PC_RELAY,
+
     /**
      * 0.2.1: a Magic Action - several of the items above, in order, from one trigger.
      *

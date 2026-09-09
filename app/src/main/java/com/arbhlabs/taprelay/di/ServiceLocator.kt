@@ -25,6 +25,7 @@ import com.arbhlabs.taprelay.execution.HapticsManager
 import com.arbhlabs.taprelay.haptics.HapticSignatureEngine
 import com.arbhlabs.taprelay.monetization.EntitlementRepository
 import com.arbhlabs.taprelay.trigger.TriggerRouter
+import com.arbhlabs.taprelay.pc.PcRelayRegistry
 
 /** Manual dependency container. Single instance, created in [com.arbhlabs.taprelay.TapRelayApplication]. */
 class ServiceLocator(context: Context) {
@@ -83,6 +84,7 @@ class ServiceLocator(context: Context) {
     val webhookClient = com.arbhlabs.taprelay.execution.webhook.WebhookClient()
     val appLauncher = com.arbhlabs.taprelay.execution.phone.AppLauncher(appContext)
     val phoneController = com.arbhlabs.taprelay.execution.phone.PhoneController(appContext)
+    val pcRelay = PcRelayRegistry()
 
     val haptics = HapticsManager(appContext)
     val hapticSignatures = HapticSignatureEngine(appContext)
@@ -101,7 +103,8 @@ class ServiceLocator(context: Context) {
         webhooks = webhookClient,
         secureStorage = secureKeyStorage,
         launcher = appLauncher,
-        phone = phoneController
+        phone = phoneController,
+        pcRelay = pcRelay
     )
 
     /** trigger -> item -> activation mode -> execute / open item / Quick Controls. */

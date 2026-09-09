@@ -13,6 +13,9 @@ import android.view.MotionEvent
 import com.arbhlabs.taprelay.controller.model.ControllerDevice
 import com.arbhlabs.taprelay.controller.model.ControllerInput
 import com.arbhlabs.taprelay.controller.model.ControllerKeys
+import com.arbhlabs.taprelay.controller.AdjustmentConfig
+import com.arbhlabs.taprelay.controller.AdjustmentEvent
+import com.arbhlabs.taprelay.controller.PostActivationAdjustmentSession
 import com.arbhlabs.taprelay.data.local.dao.ControllerMappingDao
 import com.arbhlabs.taprelay.execution.HapticsManager
 import com.arbhlabs.taprelay.execution.TapFeedback
@@ -44,11 +47,25 @@ class ControllerManager(
     var onUnmappedInput: ((String) -> Unit)? = null,
     /** Set by whichever activity is on screen, so a button can open a surface as well as fire. */
     var presenter: ActivationPresenter? = null,
+    var onAdjustmentEvent: ((AdjustmentEvent) -> Unit)? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 ) : InputManager.InputDeviceListener {
 
     private val inputManager = context.getSystemService(Context.INPUT_SERVICE) as InputManager
     private val processor = ControllerInputProcessor()
+    @Volatile var adjustmentConfig: AdjustmentConfig = AdjustmentConfig()
+        private set
+    private var adjustmentSession = PostActivationAdjustmentSession(adjustmentConfig)
+
+    fun setAdjustmentConfig(config: AdjustmentConfig) {
+        adjustmentConfig = config
+        adjustmentSession = PostActivationAdjustmentSession(config)
+    }
+
+    /** Arms only after the routed action confirmed ON; OFF/toggle callers must pass false. */
+    fun startPostActivationAdjustment(poweredOn: Boolean) {
+        adjustmentSession.start(poweredOn)
+    }
 
     /**
      * Every enabled mapping's input key, kept live from the database. The global accessibility
@@ -244,6 +261,18 @@ class ControllerManager(
         val hasControllerAttached = _connectedControllers.value.isNotEmpty()
         if (!isControllerSource && !hasControllerAttached) {
             return false
+        }
+
+        if (adjustmentSession.isActive()) {
+            val adjustment = adjustmentSession.onStick(
+                event.getAxisValue(MotionEvent.AXIS_X),
+                event.getAxisValue(MotionEvent.AXIS_Y),
+                currentBrightness = 50
+            )
+            if (adjustment != null) {
+                onAdjustmentEvent?.invoke(adjustment)
+                return true
+            }
         }
 
         val input = processor.processMotionEvent(event) ?: return _isLearningMode.value
