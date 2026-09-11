@@ -70,6 +70,14 @@ class AutomaticLightControls(
 
     /** Fired once, on the main thread, when a window closes by timing out or the light going off. */
     var onAdjustmentEnded: (() -> Unit)? = null
+    /** Fired when a D-pad press is already at 1% or 100%, so the press is felt, not ignored. */
+    var onAdjustmentLimit: (() -> Unit)? = null
+    /**
+     * The brightness this session last sent to each light. Providers cannot report a lamp's live
+     * brightness, so without this every window would start from a guess and the first press
+     * would jump to an unrelated level.
+     */
+    private val lastBrightness = HashMap<String, Int>()
     private var windowJob: Job? = null
     private var adjustingUntil = 0L
 
@@ -102,7 +110,7 @@ class AutomaticLightControls(
                 return@launch
             }
             selected = tag
-            brightness = (tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT).toFloat()
+            brightness = (lastBrightness[tagId] ?: tag.brightnessPercent ?: Brightness.DEFAULT_PERCENT).toFloat()
             hue = rgbToHue(tag.colorRgb ?: DEFAULT_COLOR)
             _state.value = AutomaticLightControlState(
                 tagId = tagId,
@@ -133,6 +141,10 @@ class AutomaticLightControls(
             val tag = withContext(Dispatchers.IO) { tags.getTagById(tagId) } ?: return@launch
             if (selected?.tagId != tagId || !_state.value.active) return@launch
             if (tag.lastKnownState == 1) {
+                // Turning on applies the item's own brightness when it has one, so that is where
+                // the lamp really is now; otherwise it kept what this session last set.
+                tag.brightnessPercent?.let { lastBrightness[tagId] = Brightness.clampPercent(it) }
+                lastBrightness[tagId]?.let { brightness = it.toFloat() }
                 startWindow()
             } else if (isAdjusting) {
                 endAdjustment(notify = true)
@@ -174,9 +186,16 @@ class AutomaticLightControls(
         when (inputKey) {
             ControllerKeys.DPAD_UP, ControllerKeys.DPAD_DOWN -> {
                 if (!current.supportsBrightness) return false
-                val next = stepBrightness(brightness.roundToInt(), up = inputKey == ControllerKeys.DPAD_UP)
+                val now = brightness.roundToInt()
+                val next = stepBrightness(now, up = inputKey == ControllerKeys.DPAD_UP)
+                if (next == now) {
+                    // Already at the end: keep the press (it is still a light press) and say so.
+                    onAdjustmentLimit?.invoke()
+                    return true
+                }
                 brightness = next.toFloat()
                 desiredBrightness = next
+                lastBrightness[tag.tagId] = next
             }
             ControllerKeys.DPAD_LEFT, ControllerKeys.DPAD_RIGHT -> {
                 if (!current.supportsColor) return false
@@ -250,17 +269,20 @@ class AutomaticLightControls(
     companion object {
         /** How long the D-pad stays borrowed after the light turns on. */
         const val WINDOW_MS = 20_000L
-        const val BRIGHTNESS_STEP = 10
+        /**
+         * Brightness notches, spaced by how a bulb looks rather than by equal percentages: a
+         * 10% step near full is invisible, while near the bottom it is a big jump.
+         */
+        val BRIGHTNESS_LEVELS = intArrayOf(1, 5, 10, 20, 35, 50, 70, 100)
         const val HUE_STEP = 30f
         private const val MIN_SEND_INTERVAL_MS = 400L
         private const val DEFAULT_COLOR = 0xFFFF0000.toInt()
 
-        /** Snaps to the next/previous multiple of [BRIGHTNESS_STEP], never below 1% or above 100%. */
+        /** The next notch above/below [current]; returns [current] unchanged at either end. */
         internal fun stepBrightness(current: Int, up: Boolean): Int {
             val c = current.coerceIn(1, 100)
-            val next = if (up) (c / BRIGHTNESS_STEP + 1) * BRIGHTNESS_STEP
-            else ((c - 1) / BRIGHTNESS_STEP) * BRIGHTNESS_STEP
-            return next.coerceIn(1, 100)
+            return if (up) BRIGHTNESS_LEVELS.firstOrNull { it > c } ?: c
+            else BRIGHTNESS_LEVELS.lastOrNull { it < c } ?: c
         }
 
         internal fun stepHue(current: Float, forward: Boolean): Float =

@@ -1,5 +1,14 @@
 # TapRelay Changelog
 
+## v0.6.2 - 2026-09-11 (Alpha / Internal Test)
+
+### Fixed
+- D-pad brightness felt spotty: 10% steps were invisible near full brightness, and every window
+  started from the item's saved value rather than where the lamp actually was. Up/Down now walk
+  visible notches (1, 5, 10, 20, 35, 50, 70, 100%) from the brightness TapRelay last set on that
+  lamp, or the item's own brightness right after it turns on.
+- Pressing Up at 100% or Down at 1% gives one soft tick instead of silently doing nothing.
+
 ## v0.6.1 - 2026-09-11 (Alpha / Internal Test)
 
 ### Changed

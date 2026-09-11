@@ -12,15 +12,17 @@ class AutomaticLightControlsTest {
     }
 
     @Test
-    fun dpad_brightness_steps_in_clean_notches_and_clamps() {
-        assertEquals(60, AutomaticLightControls.stepBrightness(50, up = true))
-        assertEquals(40, AutomaticLightControls.stepBrightness(50, up = false))
-        assertEquals(60, AutomaticLightControls.stepBrightness(53, up = true))
-        assertEquals(50, AutomaticLightControls.stepBrightness(53, up = false))
+    fun dpad_brightness_walks_visible_notches_and_stops_at_the_ends() {
+        assertEquals(70, AutomaticLightControls.stepBrightness(50, up = true))
+        assertEquals(35, AutomaticLightControls.stepBrightness(50, up = false))
+        // Off-ladder values (a saved 60%, a 53%) snap to the neighbouring notch.
+        assertEquals(70, AutomaticLightControls.stepBrightness(60, up = true))
+        assertEquals(50, AutomaticLightControls.stepBrightness(60, up = false))
+        assertEquals(70, AutomaticLightControls.stepBrightness(100, up = false))
+        assertEquals(5, AutomaticLightControls.stepBrightness(1, up = true))
+        // At either end the value is unchanged, which the caller reports as a limit.
         assertEquals(100, AutomaticLightControls.stepBrightness(100, up = true))
-        assertEquals(1, AutomaticLightControls.stepBrightness(10, up = false))
         assertEquals(1, AutomaticLightControls.stepBrightness(1, up = false))
-        assertEquals(10, AutomaticLightControls.stepBrightness(1, up = true))
     }
 
     @Test

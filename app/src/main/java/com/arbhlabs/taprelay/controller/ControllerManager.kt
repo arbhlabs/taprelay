@@ -79,6 +79,7 @@ class ControllerManager(
 
     init {
         automaticLightControls.onAdjustmentEnded = { rumbleAdjustmentEnded() }
+        automaticLightControls.onAdjustmentLimit = { rumbleAdjustmentLimit() }
         scope.launch {
             mappingDao.observeAll().collectLatest { rows ->
                 mappedInputKeys = rows.asSequence()
@@ -328,7 +329,14 @@ class ControllerManager(
      * The single "D-pad is yours again" cue: two even knocks, distinct from the rise-and-thud of
      * a success and the triple knock of a failure. Falls back to any connected pad.
      */
-    private fun rumbleAdjustmentEnded() {
+    private fun rumbleAdjustmentEnded() =
+        vibratePad(longArrayOf(0, 80, 110, 80), intArrayOf(0, 255, 0, 255))
+
+    /** One short, soft tick: "that's the brightest/dimmest it goes". */
+    private fun rumbleAdjustmentLimit() =
+        vibratePad(longArrayOf(0, 35), intArrayOf(0, 140))
+
+    private fun vibratePad(timings: LongArray, amplitudes: IntArray) {
         if (!rumbleEnabled) return
         runCatching {
             val dev = inputManager.getInputDevice(lastInputDeviceId)
@@ -340,9 +348,8 @@ class ControllerManager(
                 @Suppress("DEPRECATION") dev.vibrator
             }
             if (!vibrator.hasVibrator()) return
-            val timings = longArrayOf(0, 80, 110, 80)
             vibrator.vibrate(
-                if (vibrator.hasAmplitudeControl()) VibrationEffect.createWaveform(timings, intArrayOf(0, 255, 0, 255), -1)
+                if (vibrator.hasAmplitudeControl()) VibrationEffect.createWaveform(timings, amplitudes, -1)
                 else VibrationEffect.createWaveform(timings, -1)
             )
         }
