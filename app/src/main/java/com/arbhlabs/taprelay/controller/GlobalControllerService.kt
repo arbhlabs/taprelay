@@ -73,13 +73,28 @@ class GlobalControllerService : AccessibilityService() {
         controllerManager?.apply {
             presenter = this@GlobalControllerService.presenter
             onFeedback = { fb -> showFeedback(fb) }
-            onUnmappedInput = { label -> toast("Controller: $label — no mapping in TapRelay") }
-            startListening()
+            onUnmappedInput = { label -> unmappedToast(label) }
+            // Android can re-deliver onServiceConnected to the same bound service (seen every few
+            // seconds on the Pixel 7); listen once per instance so the ref count stays balanced.
+            if (!listening) {
+                startListening()
+                listening = true
+            }
         }
-        toast(
-            if (managerReady) "TapRelay: controller works in any app now"
-            else "TapRelay: service on, but the app isn't ready — reopen TapRelay once"
-        )
+        // Announce once per process, not on every reconnect - that read as a toast per press.
+        if (!managerReady) {
+            toast("TapRelay: service on, but the app isn't ready — reopen TapRelay once")
+        } else if (!announced) {
+            announced = true
+            toast("TapRelay: controller works in any app now")
+        }
+    }
+
+    private var listening = false
+
+    /** One "no mapping" note per button per process, so an unmapped button never nags. */
+    private fun unmappedToast(label: String) {
+        if (unmappedAnnounced.add(label)) toast("Controller: $label — no mapping in TapRelay")
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -96,7 +111,7 @@ class GlobalControllerService : AccessibilityService() {
         // back so a press that lands here is always presented and reported by this service.
         manager.presenter = presenter
         manager.onFeedback = { fb -> showFeedback(fb) }
-        manager.onUnmappedInput = { label -> toast("Controller: $label — no mapping in TapRelay") }
+        manager.onUnmappedInput = { label -> unmappedToast(label) }
 
         // consumeUnmapped = false: a button with no TapRelay mapping passes straight through to
         // whatever app is in front, so the service never steals a game or app button.
@@ -116,8 +131,9 @@ class GlobalControllerService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         controllerManager?.apply {
             onUnmappedInput = null
-            stopListening()
+            if (listening) stopListening()
         }
+        listening = false
         if (instance === this) instance = null
         return super.onUnbind(intent)
     }
@@ -134,6 +150,9 @@ class GlobalControllerService : AccessibilityService() {
 
     companion object {
         private const val TAG = "TapRelayGlobalCtrl"
+
+        @Volatile private var announced = false
+        private val unmappedAnnounced = java.util.Collections.synchronizedSet(HashSet<String>())
 
         @Volatile
         private var instance: GlobalControllerService? = null
