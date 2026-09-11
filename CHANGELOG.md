@@ -1,5 +1,20 @@
 # TapRelay Changelog
 
+## v0.6.1 - 2026-09-11 (Alpha / Internal Test)
+
+### Changed
+- Light adjustment moved from the left stick (too sensitive) to the D-pad. Turning a light on
+  with a controller opens a 20-second window: D-pad up/down steps brightness in 10% notches,
+  left/right steps colour by 30° of hue. Unsupported directions keep their normal mapping.
+- The window closes after exactly 20 s (or when that light goes off), the D-pad returns to its
+  own mappings, and the pad gives one double-knock so you know. Turning the light on again
+  restarts the window; switching to another item or disconnecting the pad closes it quietly.
+- The left stick no longer changes lights at all.
+
+### Fixed
+- LastDose logging shows "LastDose isn't available" after LastDose was reinstalled — fixed on
+  the LastDose side in 7.2.8 (install-order-dependent permission gate removed).
+
 ## v0.6.0 - 2026-09-09 (Alpha / Internal Test)
 
 ### Added

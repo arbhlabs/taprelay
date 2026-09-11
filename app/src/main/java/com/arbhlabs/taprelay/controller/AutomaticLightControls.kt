@@ -1,5 +1,6 @@
 package com.arbhlabs.taprelay.controller
 
+import com.arbhlabs.taprelay.controller.model.ControllerKeys
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.Brightness
 import com.arbhlabs.taprelay.domain.model.DeviceCapabilities
@@ -24,22 +25,31 @@ data class AutomaticLightControlState(
     val supportsBrightness: Boolean = false,
     val supportsColor: Boolean = false,
     val loading: Boolean = false,
-    val status: String? = null
+    val status: String? = null,
+    /** True only during the short window after the light was turned on. */
+    val adjusting: Boolean = false
 ) {
     val active: Boolean get() = tagId != null && (supportsBrightness || supportsColor)
     val description: String?
-        get() = when {
-            !active -> null
-            supportsBrightness && supportsColor -> "Left stick: up/down brightness • left/right colour"
-            supportsBrightness -> "Left stick: up/down brightness"
-            else -> "Left stick: left/right colour"
+        get() {
+            if (!active) return null
+            val controls = when {
+                supportsBrightness && supportsColor -> "up/down brightness • left/right colour"
+                supportsBrightness -> "up/down brightness"
+                else -> "left/right colour"
+            }
+            return if (adjusting) "D-pad now: $controls" else "Turn on, then D-pad for 20 s: $controls"
         }
 }
 
 /**
  * Capability-driven, transient controller controls for the most recently selected/mapped light.
- * Stick events update a desired value immediately; at most one coalesced cloud write is launched
- * per [MIN_SEND_INTERVAL_MS]. Explicit mappings for a stick direction are respected by callers.
+ *
+ * Turning the light on opens a [WINDOW_MS] adjustment window in which the D-pad steps brightness
+ * and colour in discrete notches. The D-pad is only borrowed: outside the window every D-pad press
+ * goes to its normal mapping, and [onAdjustmentEnded] fires once when the window closes so the
+ * caller can tell the hand holding the pad. Each step updates a desired value immediately; at
+ * most one coalesced cloud write is launched per [MIN_SEND_INTERVAL_MS].
  */
 class AutomaticLightControls(
     private val tags: TagRepository,
@@ -58,8 +68,18 @@ class AutomaticLightControls(
     private var desiredBrightness: Int? = null
     private var desiredColor: Int? = null
 
+    /** Fired once, on the main thread, when a window closes by timing out or the light going off. */
+    var onAdjustmentEnded: (() -> Unit)? = null
+    private var windowJob: Job? = null
+    private var adjustingUntil = 0L
+
+    val isAdjusting: Boolean
+        get() = selected != null && System.currentTimeMillis() < adjustingUntil
+
     fun select(tagId: String) {
         if (_state.value.tagId == tagId && !_state.value.loading) return
+        // Another item took over the pad; its own action feedback is the cue, so no extra buzz.
+        endAdjustment(notify = false)
         selectionJob?.cancel()
         sendJob?.cancel()
         desiredBrightness = null
@@ -94,6 +114,7 @@ class AutomaticLightControls(
     }
 
     fun clear() {
+        endAdjustment(notify = false)
         selectionJob?.cancel()
         sendJob?.cancel()
         selected = null
@@ -102,27 +123,70 @@ class AutomaticLightControls(
         _state.value = AutomaticLightControlState()
     }
 
-    /** Returns true only when a supported axis was handled. */
-    fun onAxes(x: Float, y: Float, allowHorizontal: Boolean, allowVertical: Boolean): Boolean {
+    /**
+     * Called after a mapped action for [tagId] settled successfully. Opens (or restarts) the
+     * adjustment window when the light is now on; closes it when the same light went off.
+     */
+    fun onActivationSettled(tagId: String) {
+        scope.launch {
+            selectionJob?.join()
+            val tag = withContext(Dispatchers.IO) { tags.getTagById(tagId) } ?: return@launch
+            if (selected?.tagId != tagId || !_state.value.active) return@launch
+            if (tag.lastKnownState == 1) {
+                startWindow()
+            } else if (isAdjusting) {
+                endAdjustment(notify = true)
+            }
+        }
+    }
+
+    private fun startWindow() {
+        // One timer at most: a repeat "on" restarts the same window instead of stacking another.
+        windowJob?.cancel()
+        adjustingUntil = System.currentTimeMillis() + WINDOW_MS
+        _state.value = _state.value.copy(adjusting = true)
+        windowJob = scope.launch {
+            delay(WINDOW_MS)
+            windowJob = null
+            endAdjustment(notify = true)
+        }
+    }
+
+    /** Closes the window; [notify] asks for the single "back to normal" cue. No-op when closed. */
+    fun endAdjustment(notify: Boolean) {
+        val wasOpen = adjustingUntil != 0L
+        windowJob?.cancel()
+        windowJob = null
+        adjustingUntil = 0L
+        if (!wasOpen) return
+        _state.value = _state.value.copy(adjusting = false)
+        if (notify) onAdjustmentEnded?.invoke()
+    }
+
+    /**
+     * One discrete D-pad step. Returns true only when the press was used for the light, so an
+     * unsupported direction - or any press outside the window - keeps its normal mapping.
+     */
+    fun onDpad(inputKey: String): Boolean {
+        if (!isAdjusting) return false
         val tag = selected ?: return false
         val current = _state.value
-        var changed = false
-        val nx = normalized(x)
-        val ny = normalized(y)
-
-        if (allowVertical && current.supportsBrightness && ny != 0f) {
-            // Android Y is positive down, so pushing up increases brightness.
-            brightness = (brightness - ny * BRIGHTNESS_PER_EVENT).coerceIn(1f, 100f)
-            desiredBrightness = brightness.roundToInt()
-            changed = true
+        when (inputKey) {
+            ControllerKeys.DPAD_UP, ControllerKeys.DPAD_DOWN -> {
+                if (!current.supportsBrightness) return false
+                val next = stepBrightness(brightness.roundToInt(), up = inputKey == ControllerKeys.DPAD_UP)
+                brightness = next.toFloat()
+                desiredBrightness = next
+            }
+            ControllerKeys.DPAD_LEFT, ControllerKeys.DPAD_RIGHT -> {
+                if (!current.supportsColor) return false
+                hue = stepHue(hue, forward = inputKey == ControllerKeys.DPAD_RIGHT)
+                desiredColor = hsvToRgb(hue)
+            }
+            else -> return false
         }
-        if (allowHorizontal && current.supportsColor && nx != 0f) {
-            hue = wrapHue(hue + nx * HUE_PER_EVENT)
-            desiredColor = hsvToRgb(hue)
-            changed = true
-        }
-        if (changed) scheduleSend(tag)
-        return changed
+        scheduleSend(tag)
+        return true
     }
 
     private fun scheduleSend(tag: TagEntity) {
@@ -183,22 +247,24 @@ class AutomaticLightControls(
         modes = a.modes.filter { it in b.modes }
     )
 
-    private fun normalized(value: Float): Float {
-        val magnitude = abs(value)
-        if (magnitude <= DEAD_ZONE) return 0f
-        return ((magnitude - DEAD_ZONE) / (1f - DEAD_ZONE)).coerceIn(0f, 1f) * if (value < 0) -1 else 1
-    }
-
     companion object {
-        const val LEFT_STICK_UP = "LEFT_STICK_UP"
-        const val LEFT_STICK_DOWN = "LEFT_STICK_DOWN"
-        const val LEFT_STICK_LEFT = "LEFT_STICK_LEFT"
-        const val LEFT_STICK_RIGHT = "LEFT_STICK_RIGHT"
-        private const val DEAD_ZONE = 0.20f
-        private const val BRIGHTNESS_PER_EVENT = 4.5f
-        private const val HUE_PER_EVENT = 12f
+        /** How long the D-pad stays borrowed after the light turns on. */
+        const val WINDOW_MS = 20_000L
+        const val BRIGHTNESS_STEP = 10
+        const val HUE_STEP = 30f
         private const val MIN_SEND_INTERVAL_MS = 400L
         private const val DEFAULT_COLOR = 0xFFFF0000.toInt()
+
+        /** Snaps to the next/previous multiple of [BRIGHTNESS_STEP], never below 1% or above 100%. */
+        internal fun stepBrightness(current: Int, up: Boolean): Int {
+            val c = current.coerceIn(1, 100)
+            val next = if (up) (c / BRIGHTNESS_STEP + 1) * BRIGHTNESS_STEP
+            else ((c - 1) / BRIGHTNESS_STEP) * BRIGHTNESS_STEP
+            return next.coerceIn(1, 100)
+        }
+
+        internal fun stepHue(current: Float, forward: Boolean): Float =
+            wrapHue(current + if (forward) HUE_STEP else -HUE_STEP)
 
         internal fun wrapHue(value: Float): Float = ((value % 360f) + 360f) % 360f
 

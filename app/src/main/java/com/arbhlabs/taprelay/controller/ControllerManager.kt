@@ -78,6 +78,7 @@ class ControllerManager(
     private var mappedInputKeys: Set<String> = emptySet()
 
     init {
+        automaticLightControls.onAdjustmentEnded = { rumbleAdjustmentEnded() }
         scope.launch {
             mappingDao.observeAll().collectLatest { rows ->
                 mappedInputKeys = rows.asSequence()
@@ -178,6 +179,8 @@ class ControllerManager(
 
     override fun onInputDeviceRemoved(deviceId: Int) {
         refreshConnectedControllers()
+        // No pad left to adjust with or to buzz: close the window quietly.
+        if (_connectedControllers.value.isEmpty()) automaticLightControls.endAdjustment(notify = false)
     }
 
     override fun onInputDeviceChanged(deviceId: Int) {
@@ -245,6 +248,13 @@ class ControllerManager(
         val activeDev = _connectedControllers.value.firstOrNull()
         val descriptor = event.device?.descriptor?.ifBlank { activeDev?.descriptor ?: "*" } ?: activeDev?.descriptor ?: "*"
         val controllerName = event.device?.name?.ifBlank { activeDev?.name ?: "Gamepad" } ?: activeDev?.name ?: "Gamepad"
+        // Inside the light-adjustment window the D-pad is borrowed, mapped or not.
+        if (!_isLearningMode.value && automaticLightControls.onDpad(input.key)) {
+            if (event.deviceId >= 0) lastInputDeviceId = event.deviceId
+            _lastInput.value = input to System.currentTimeMillis()
+            consumedDownKeys.add(event.keyCode)
+            return true
+        }
         // The global service must not steal a button nobody mapped: let it fall through to the app.
         if (!consumeUnmapped && !_isLearningMode.value && !isInputMapped(input.key)) {
             _lastInput.value = input to System.currentTimeMillis()
@@ -267,19 +277,10 @@ class ControllerManager(
             return false
         }
 
+        // The left stick no longer adjusts lights (too sensitive); the D-pad does, briefly, after
+        // the light turns on - see AutomaticLightControls. Stick motion keeps its normal role.
         val x = event.getAxisValue(MotionEvent.AXIS_X)
         val y = event.getAxisValue(MotionEvent.AXIS_Y)
-        val horizontalExplicit = (x < 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_LEFT)) ||
-            (x > 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_RIGHT))
-        val verticalExplicit = (y < 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_UP)) ||
-            (y > 0 && isInputMapped(AutomaticLightControls.LEFT_STICK_DOWN))
-        if (automaticLightControls.onAxes(
-                x = x,
-                y = y,
-                allowHorizontal = !horizontalExplicit,
-                allowVertical = !verticalExplicit
-            )) return true
-
         if (adjustmentSession.isActive()) {
             val adjustment = adjustmentSession.onStick(
                 x,
@@ -320,6 +321,30 @@ class ControllerManager(
             }
             if (!vibrator.hasVibrator()) return
             vibrator.vibrate(rumbleEffect(vibrator, success))
+        }
+    }
+
+    /**
+     * The single "D-pad is yours again" cue: two even knocks, distinct from the rise-and-thud of
+     * a success and the triple knock of a failure. Falls back to any connected pad.
+     */
+    private fun rumbleAdjustmentEnded() {
+        if (!rumbleEnabled) return
+        runCatching {
+            val dev = inputManager.getInputDevice(lastInputDeviceId)
+                ?: _connectedControllers.value.firstOrNull()?.let { inputManager.getInputDevice(it.id) }
+                ?: return
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dev.vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") dev.vibrator
+            }
+            if (!vibrator.hasVibrator()) return
+            val timings = longArrayOf(0, 80, 110, 80)
+            vibrator.vibrate(
+                if (vibrator.hasAmplitudeControl()) VibrationEffect.createWaveform(timings, intArrayOf(0, 255, 0, 255), -1)
+                else VibrationEffect.createWaveform(timings, -1)
+            )
         }
     }
 
@@ -393,7 +418,10 @@ class ControllerManager(
             return true
         }
 
-        // 2. Otherwise, check for an active mapping in the database
+        // 2. A D-pad press inside the light-adjustment window steps the light instead.
+        if (automaticLightControls.onDpad(input.key)) return true
+
+        // 3. Otherwise, check for an active mapping in the database
         scope.launch {
             val mapping = withContext(Dispatchers.IO) {
                 mappingDao.findActiveMapping(descriptor, input.key)
@@ -422,6 +450,7 @@ class ControllerManager(
                     ),
                     presenter = presenter
                 ) { fb ->
+                    if (!fb.pending && !fb.isError) automaticLightControls.onActivationSettled(mapping.tagId)
                     onFeedback?.invoke(fb)
                 }
             } else {

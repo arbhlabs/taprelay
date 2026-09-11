@@ -62,11 +62,11 @@
             routes key events here first; no window content is read. Nothing runs until the owner
             enables it in Accessibility settings. Remote Mode below stays the zero-setup option.
         -->
-        <service
-            android:name=".controller.GlobalControllerService"
-            android:exported="false"
-            android:label="@string/global_controller_a11y_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+         <service
+             android:name=".controller.GlobalControllerService"
+             android:exported="true"
+             android:label="@string/global_controller_a11y_label"
+             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
