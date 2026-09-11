@@ -180,7 +180,13 @@ fun PcRelayScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                TextButton(onClick = { vm.testItem(tag) }) { Text("Test") }
+                                // Momentary switch: on while the PC runs it, then back off.
+                                val running by vm.runningItems.collectAsState()
+                                val busy = running.contains(tag.tagId)
+                                androidx.compose.material3.Switch(
+                                    checked = busy,
+                                    onCheckedChange = { on -> if (on && !busy) vm.testItem(tag) }
+                                )
                                 IconButton(onClick = { confirmDelete = tag }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete")
                                 }

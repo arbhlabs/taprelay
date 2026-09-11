@@ -903,7 +903,7 @@ private fun HomeScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    iconFor(tag.iconKey), null,
+                                    if (tag.isPcRelay) Icons.Default.Computer else iconFor(tag.iconKey), null,
                                     tint = if (busy) MaterialTheme.colorScheme.onPrimary
                                     else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(22.dp)
@@ -928,14 +928,24 @@ private fun HomeScreen(
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (busy) {
-                                CircularProgressIndicator(
-                                    Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
+                            if (!tag.isNonDevice &&
+                                tag.targetType != com.arbhlabs.taprelay.domain.model.TargetType.SCENE
+                            ) {
+                                // A device has a state, so its switch shows it and sets it.
+                                androidx.compose.material3.Switch(
+                                    checked = tag.lastKnownState == 1,
+                                    onCheckedChange = { on -> vm.setItemPower(tag, on) },
+                                    enabled = !busy,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
                                 )
-                                Spacer(Modifier.width(12.dp))
                             } else {
-                                TextButton(onClick = { vm.testTag(tag) }) { Text("Test") }
+                                // Scenes, logs, PC actions, web requests have no state: a momentary
+                                // switch, on while the action runs and back off when it finishes.
+                                androidx.compose.material3.Switch(
+                                    checked = busy,
+                                    onCheckedChange = { on -> if (on && !busy) vm.testTag(tag) },
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
                             }
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowRight, null,

@@ -179,7 +179,13 @@ fun LastDoseScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                TextButton(onClick = { vm.testItem(tag) }) { Text("Test") }
+                                // Momentary switch: on while the log is written, then back off.
+                                val running by vm.runningItems.collectAsState()
+                                val busy = running.contains(tag.tagId)
+                                androidx.compose.material3.Switch(
+                                    checked = busy,
+                                    onCheckedChange = { on -> if (on && !busy) vm.testItem(tag) }
+                                )
                                 IconButton(onClick = { confirmDelete = tag }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete")
                                 }

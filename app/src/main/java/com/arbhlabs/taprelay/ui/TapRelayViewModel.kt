@@ -897,6 +897,47 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         services.actionExecutor.executeByTagId(tag.tagId) { fb -> _pill.value = fb }
     }
 
+    /**
+     * The home switch: an explicit on or off for every device the item drives, never a blind
+     * toggle. On restores the item's own look (brightness/colour) when it has one. The switch
+     * moves at once and moves back if no device answered.
+     */
+    fun setItemPower(tag: TagEntity, on: Boolean) = viewModelScope.launch {
+        val previous = tag.lastKnownState
+        services.tagRepository.updateStateAndTimestamp(tag.tagId, if (on) 1 else 0, System.currentTimeMillis())
+        var succeeded = 0
+        var failure: String? = null
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            for (target in tag.allTargets) {
+                val provider = services.providers[target.providerId] ?: continue
+                try {
+                    val b = tag.brightnessPercent
+                    val c = tag.colorRgb
+                    when {
+                        !on -> provider.setPower(target.deviceId, target.sku, false)
+                        b != null && c != null -> provider.setLook(target.deviceId, target.sku, c, b)
+                        b != null -> provider.setBrightness(target.deviceId, target.sku, b)
+                        c != null -> provider.setColor(target.deviceId, target.sku, c)
+                        else -> provider.setPower(target.deviceId, target.sku, true)
+                    }
+                    succeeded++
+                } catch (e: Exception) {
+                    if (failure == null) {
+                        failure = (e as? com.arbhlabs.taprelay.domain.model.TapException)?.error?.message
+                            ?: "Device did not respond"
+                    }
+                }
+            }
+        }
+        if (succeeded > 0) {
+            services.haptics.vibrateSuccess()
+        } else {
+            services.tagRepository.updateStateAndTimestamp(tag.tagId, previous, System.currentTimeMillis())
+            services.haptics.vibrateError()
+            _pill.value = TapFeedback("${tag.friendlyName} • ${failure ?: "Device did not respond"}", isError = true)
+        }
+    }
+
     // ---- Scan handling (from Activity) ----
 
     fun onForegroundScan(tagId: String?) {

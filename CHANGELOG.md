@@ -11,6 +11,10 @@
   the browser even when it is not focused. Only a phone that typed the code shown on the PC gets
   a token; tokens are stored hashed. Starts with Windows (can be turned off in its window).
 
+- Home screen: every lamp/device item has a real on/off switch showing its state (on restores
+  the item's own brightness/colour; the switch snaps back if no device answers). Scenes, LastDose
+  logs, PC actions and web requests get a ▶ run button instead of "Test".
+
 ### Fixed
 - The existing PC relay code was never connected: pairing was never loaded, item values were
   never sent, and plain-HTTP calls to the PC were blocked. Discovery now uses the address the
