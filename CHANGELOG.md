@@ -8,6 +8,13 @@
   visible notches (1, 5, 10, 20, 35, 50, 70, 100%) from the brightness TapRelay last set on that
   lamp, or the item's own brightness right after it turns on.
 - Pressing Up at 100% or Down at 1% gives one soft tick instead of silently doing nothing.
+- The D-pad now reaches the light window wherever you are. Android never gives the Xbox D-pad to
+  the "any app" service, so outside TapRelay it moved the phone's UI, and in LastDose's
+  always-on screen only the mapped Left/Right reached TapRelay (colour worked, brightness moved
+  the UI). While the 20-second window is open and TapRelay isn't on screen, a small pill at the
+  bottom holds the D-pad; taps elsewhere still reach the app behind (and hand the D-pad back),
+  and the pill closes itself when the window ends.
+- Light adjustments now log each D-pad step and any light that fails to respond.
 
 ## v0.6.1 - 2026-09-11 (Alpha / Internal Test)
 

@@ -1,5 +1,6 @@
 package com.arbhlabs.taprelay.controller
 
+import android.util.Log
 import com.arbhlabs.taprelay.controller.model.ControllerKeys
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.domain.model.Brightness
@@ -70,6 +71,8 @@ class AutomaticLightControls(
 
     /** Fired once, on the main thread, when a window closes by timing out or the light going off. */
     var onAdjustmentEnded: (() -> Unit)? = null
+    /** Fired, on the main thread, each time a window opens or restarts. */
+    var onAdjustmentStarted: (() -> Unit)? = null
     /** Fired when a D-pad press is already at 1% or 100%, so the press is felt, not ignored. */
     var onAdjustmentLimit: (() -> Unit)? = null
     /**
@@ -157,6 +160,7 @@ class AutomaticLightControls(
         windowJob?.cancel()
         adjustingUntil = System.currentTimeMillis() + WINDOW_MS
         _state.value = _state.value.copy(adjusting = true)
+        onAdjustmentStarted?.invoke()
         windowJob = scope.launch {
             delay(WINDOW_MS)
             windowJob = null
@@ -183,6 +187,8 @@ class AutomaticLightControls(
         if (!isAdjusting) return false
         val tag = selected ?: return false
         val current = _state.value
+        Log.i(TAG, "dpad $inputKey tag=${tag.friendlyName} brightness=${brightness.roundToInt()} " +
+            "supportsBrightness=${current.supportsBrightness} supportsColor=${current.supportsColor}")
         when (inputKey) {
             ControllerKeys.DPAD_UP, ControllerKeys.DPAD_DOWN -> {
                 if (!current.supportsBrightness) return false
@@ -235,14 +241,19 @@ class AutomaticLightControls(
         var successes = 0
         for (target in tag.allTargets) {
             val provider = providers()[target.providerId] ?: continue
-            val ok = runCatching {
+            val result = runCatching {
                 when {
                     b != null && c != null -> provider.setLook(target.deviceId, target.sku, c, b)
                     b != null -> provider.setBrightness(target.deviceId, target.sku, b)
                     c != null -> provider.setColor(target.deviceId, target.sku, c)
                 }
-            }.isSuccess
-            if (ok) successes++
+            }
+            // A failed cloud call used to vanish here; it is the first thing to check when a
+            // step "does nothing".
+            result.exceptionOrNull()?.let {
+                Log.w(TAG, "send failed provider=${target.providerId} brightness=$b colour=$c", it)
+            } ?: Log.i(TAG, "sent provider=${target.providerId} brightness=$b colour=$c")
+            if (result.isSuccess) successes++
         }
         if (successes > 0) {
             tags.updateStateAndTimestamp(tag.tagId, 1, System.currentTimeMillis())
@@ -267,6 +278,8 @@ class AutomaticLightControls(
     )
 
     companion object {
+        private const val TAG = "TapRelayLightAdjust"
+
         /** How long the D-pad stays borrowed after the light turns on. */
         const val WINDOW_MS = 20_000L
         /**

@@ -106,6 +106,17 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.TapRelay.Transparent" />
 
+        <!-- Holds D-pad focus only during the 20 s light window when TapRelay is not on screen.
+             Own empty task affinity so launching it never brings TapRelay's main task forward. -->
+        <activity
+            android:name=".ui.LightAdjustHudActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TapRelay.Transparent" />
+
         <activity
             android:name=".ui.NfcTrampolineActivity"
             android:exported="true"

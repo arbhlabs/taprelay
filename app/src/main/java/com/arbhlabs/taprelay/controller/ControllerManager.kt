@@ -80,6 +80,7 @@ class ControllerManager(
     init {
         automaticLightControls.onAdjustmentEnded = { rumbleAdjustmentEnded() }
         automaticLightControls.onAdjustmentLimit = { rumbleAdjustmentLimit() }
+        automaticLightControls.onAdjustmentStarted = { showAdjustmentPillIfNeeded() }
         scope.launch {
             mappingDao.observeAll().collectLatest { rows ->
                 mappedInputKeys = rows.asSequence()
@@ -332,6 +333,24 @@ class ControllerManager(
     private fun rumbleAdjustmentEnded() =
         vibratePad(longArrayOf(0, 80, 110, 80), intArrayOf(0, 255, 0, 255))
 
+    /**
+     * Outside TapRelay nothing of ours receives the D-pad (Android keeps hat axes from
+     * accessibility services), so the window borrows focus with a small pill. TapRelay's own
+     * screens already get the D-pad and need nothing.
+     */
+    private fun showAdjustmentPillIfNeeded() {
+        if (com.arbhlabs.taprelay.TapRelayApplication.resumedScreens > 0) return
+        runCatching {
+            context.startActivity(
+                android.content.Intent(context, com.arbhlabs.taprelay.ui.LightAdjustHudActivity::class.java)
+                    .addFlags(
+                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                            android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    )
+            )
+        }.onFailure { Log.w(TAG, "could not show the light-adjust pill", it) }
+    }
+
     /** One short, soft tick: "that's the brightest/dimmest it goes". */
     private fun rumbleAdjustmentLimit() =
         vibratePad(longArrayOf(0, 35), intArrayOf(0, 140))
@@ -426,6 +445,9 @@ class ControllerManager(
         }
 
         // 2. A D-pad press inside the light-adjustment window steps the light instead.
+        if (input.key.startsWith("DPAD_")) {
+            Log.i(TAG, "decoded ${input.key} adjusting=${automaticLightControls.isAdjusting}")
+        }
         if (automaticLightControls.onDpad(input.key)) return true
 
         // 3. Otherwise, check for an active mapping in the database
