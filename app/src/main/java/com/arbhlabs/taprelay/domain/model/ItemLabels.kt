@@ -37,7 +37,8 @@ object ItemLabels {
         }
         tag.isLaunch -> if (tag.deviceSku == LaunchKind.LINK) "Opens a link" else "Opens an app"
         tag.isPhone -> PhoneAction.label(tag.deviceId)
-        tag.isPcRelay -> "Windows • ${tag.deviceId.replace('.', ' ').replace('_', ' ')}"
+        tag.isPcRelay -> "Windows • " + com.arbhlabs.taprelay.pc.PcRelayAction.label(tag.deviceId) +
+            (tag.deviceSku.takeIf { it.isNotBlank() }?.let { " • $it" } ?: "")
         tag.targetType == TargetType.SCENE -> providerLabel(tag.providerId) + " scene"
         else -> providerLabel(tag.providerId)
     }

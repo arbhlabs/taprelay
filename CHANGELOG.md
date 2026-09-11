@@ -1,5 +1,21 @@
 # TapRelay Changelog
 
+## v0.6.3 - 2026-09-11 (Alpha / Internal Test)
+
+### Added
+- **Windows PC** (⋮ → Windows PC): pair a PC running the new TapRelay PC Relay helper with a
+  6-digit code, then add PC actions as ordinary items and map them to any controller button, NFC
+  tag or place: Play/Pause, Next, Previous, Stop, Volume up/down, Mute, any keyboard shortcut
+  (e.g. `ctrl+shift+m`, `alt+tab`, `f11`), open a link/app/file, lock, screen off, sleep.
+- TapRelay PC Relay (`windows-relay/`): a small tray app for Windows. Media keys reach YouTube in
+  the browser even when it is not focused. Only a phone that typed the code shown on the PC gets
+  a token; tokens are stored hashed. Starts with Windows (can be turned off in its window).
+
+### Fixed
+- The existing PC relay code was never connected: pairing was never loaded, item values were
+  never sent, and plain-HTTP calls to the PC were blocked. Discovery now uses the address the
+  PC actually replied from, so a VPN adapter on the PC cannot break pairing.
+
 ## v0.6.2 - 2026-09-11 (Alpha / Internal Test)
 
 ### Fixed

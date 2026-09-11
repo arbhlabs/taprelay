@@ -25,7 +25,10 @@ class PcRelayDiscovery(
                     socket.receive(packet)
                     val response = PcRelayProtocol.decodeDiscovery(String(packet.data, 0, packet.length))
                     if (response.protocol == PcRelayProtocol.CURRENT_VERSION) {
-                        found["${response.host}:${response.port}"] = response
+                        // Trust the address the reply actually came from over the one it names: a
+                        // PC with a VPN or several adapters can advertise one the phone cannot reach.
+                        val reachable = response.copy(host = packet.address.hostAddress ?: response.host)
+                        found["${reachable.host}:${reachable.port}"] = reachable
                     }
                 } catch (_: java.net.SocketTimeoutException) {
                     break

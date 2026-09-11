@@ -26,6 +26,8 @@ import com.arbhlabs.taprelay.haptics.HapticSignatureEngine
 import com.arbhlabs.taprelay.monetization.EntitlementRepository
 import com.arbhlabs.taprelay.trigger.TriggerRouter
 import com.arbhlabs.taprelay.pc.PcRelayRegistry
+import kotlinx.coroutines.launch
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -88,6 +90,29 @@ class ServiceLocator(context: Context) {
     val appLauncher = com.arbhlabs.taprelay.execution.phone.AppLauncher(appContext)
     val phoneController = com.arbhlabs.taprelay.execution.phone.PhoneController(appContext)
     val pcRelay = PcRelayRegistry()
+
+    /** Plain HTTP on the home network, short timeouts: a controller press should fail fast. */
+    val pcRelayHttp = io.ktor.client.HttpClient(io.ktor.client.engine.android.Android) {
+        engine {
+            connectTimeout = 2_500
+            socketTimeout = 4_000
+        }
+        install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
+            json(com.arbhlabs.taprelay.pc.PcRelayProtocol.json)
+        }
+    }
+
+    init {
+        // The pairing lives in encrypted storage; keep the executor's relay in step with it.
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+            secureKeyStorage.getPcRelayCredentials().collect { creds ->
+                if (creds == null) pcRelay.clear()
+                else pcRelay.configure(
+                    com.arbhlabs.taprelay.pc.PcRelayClient(pcRelayHttp, creds.baseUrl, creds.token, creds.ownerId)
+                )
+            }
+        }
+    }
 
     val haptics = HapticsManager(appContext)
     val hapticSignatures = HapticSignatureEngine(appContext)

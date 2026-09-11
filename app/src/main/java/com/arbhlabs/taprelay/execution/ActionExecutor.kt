@@ -236,7 +236,7 @@ class ActionExecutor(
             return finishFailure(tag, "windows", startTime, silent, onFeedback, "That Windows action is no longer available.")
         }
         if (!silent) onFeedback(TapFeedback("${tag.friendlyName} • Sending…", false, pending = true))
-        return when (val result = relay.send(tag.deviceId, eventId = "${tag.tagId}:${UUID.randomUUID()}")) {
+        return when (val result = relay.send(tag.deviceId, value = tag.deviceSku.ifBlank { null }, eventId = "${tag.tagId}:${UUID.randomUUID()}")) {
             is PcRelayResult.Accepted -> finishSuccess(
                 tag, "windows", startTime, silent, onFeedback,
                 result.message ?: "Sent to Windows", result.message ?: "Sent to Windows"

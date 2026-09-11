@@ -37,6 +37,7 @@
         android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.TapRelay"
+        android:usesCleartextTraffic="true"
         tools:targetApi="35">
 
         <activity

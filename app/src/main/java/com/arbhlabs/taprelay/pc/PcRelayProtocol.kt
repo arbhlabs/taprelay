@@ -68,9 +68,36 @@ object PcRelayAction {
     const val MEDIA_VOLUME_UP = "media.volume_up"
     const val MEDIA_VOLUME_DOWN = "media.volume_down"
     const val MEDIA_MUTE = "media.mute"
+    const val MEDIA_STOP = "media.stop"
+    /** Value: a shortcut such as "ctrl+shift+m", "alt+tab", "f11", "win+d" or "space". */
+    const val KEYS_SEND = "keys.send"
+    /** Value: a URL, a program path or a file/folder, opened the way double-clicking would. */
+    const val OPEN_TARGET = "open.target"
+    const val SYSTEM_LOCK = "system.lock"
+    const val DISPLAY_OFF = "display.off"
+    const val SYSTEM_SLEEP = "system.sleep"
 
-    val all = setOf(
-        MEDIA_PLAY_PAUSE, MEDIA_NEXT, MEDIA_PREVIOUS,
-        MEDIA_VOLUME_UP, MEDIA_VOLUME_DOWN, MEDIA_MUTE
+    /** One PC action as the editor shows it; [valueHint] non-null means it needs a value. */
+    data class Spec(val id: String, val label: String, val valueLabel: String? = null, val valueHint: String? = null)
+
+    val specs = listOf(
+        Spec(MEDIA_PLAY_PAUSE, "Play / Pause"),
+        Spec(MEDIA_NEXT, "Next track"),
+        Spec(MEDIA_PREVIOUS, "Previous track"),
+        Spec(MEDIA_STOP, "Stop"),
+        Spec(MEDIA_VOLUME_UP, "Volume up"),
+        Spec(MEDIA_VOLUME_DOWN, "Volume down"),
+        Spec(MEDIA_MUTE, "Mute"),
+        Spec(KEYS_SEND, "Keyboard shortcut", "Shortcut", "e.g. ctrl+shift+m, alt+tab, f11, win+d"),
+        Spec(OPEN_TARGET, "Open a link, app or file", "What to open", "e.g. https://youtube.com or C:\\Games\\game.exe"),
+        Spec(SYSTEM_LOCK, "Lock the PC"),
+        Spec(DISPLAY_OFF, "Turn the screen off"),
+        Spec(SYSTEM_SLEEP, "Sleep")
     )
+
+    val all = specs.map { it.id }.toSet()
+
+    fun spec(id: String): Spec? = specs.firstOrNull { it.id == id }
+
+    fun label(id: String): String = spec(id)?.label ?: id
 }

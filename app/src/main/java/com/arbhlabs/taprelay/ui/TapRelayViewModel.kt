@@ -1065,6 +1065,67 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         services.tagRepository.delete(tag)
     }
 
+    // ---- Windows PC relay ------------------------------------------------------------------
+
+    val pcRelayCredentials: StateFlow<com.arbhlabs.taprelay.data.secure.PcRelayCredentials?> =
+        services.secureKeyStorage.getPcRelayCredentials()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _pcFound = MutableStateFlow<List<com.arbhlabs.taprelay.pc.PcRelayProtocol.DiscoveryResponse>?>(null)
+    val pcFound: StateFlow<List<com.arbhlabs.taprelay.pc.PcRelayProtocol.DiscoveryResponse>?> = _pcFound.asStateFlow()
+    private val _pcBusy = MutableStateFlow(false)
+    val pcBusy: StateFlow<Boolean> = _pcBusy.asStateFlow()
+    private val _pcMessage = MutableStateFlow<String?>(null)
+    val pcMessage: StateFlow<String?> = _pcMessage.asStateFlow()
+
+    fun findPcs() = viewModelScope.launch {
+        _pcBusy.value = true
+        _pcMessage.value = null
+        val found = runCatching { com.arbhlabs.taprelay.pc.PcRelayDiscovery(timeoutMs = 1_500).discover() }
+            .getOrDefault(emptyList())
+        _pcFound.value = found
+        if (found.isEmpty()) {
+            _pcMessage.value = "No PC found. Make sure TapRelay PC Relay is running on it and both are on the same Wi-Fi."
+        }
+        _pcBusy.value = false
+    }
+
+    fun pairPc(pc: com.arbhlabs.taprelay.pc.PcRelayProtocol.DiscoveryResponse, code: String) = viewModelScope.launch {
+        _pcBusy.value = true
+        val baseUrl = "http://${pc.host}:${pc.port}"
+        val ownerId = java.util.UUID.randomUUID().toString()
+        com.arbhlabs.taprelay.pc.PcRelayClient(services.pcRelayHttp, baseUrl, token = "", ownerId = ownerId)
+            .pair(code)
+            .onSuccess {
+                services.secureKeyStorage.savePcRelayCredentials(
+                    com.arbhlabs.taprelay.data.secure.PcRelayCredentials(baseUrl, it.token, ownerId)
+                )
+                _pcFound.value = null
+                _pcMessage.value = "Paired with ${pc.name}."
+                services.haptics.vibrateSuccess()
+            }
+            .onFailure { _pcMessage.value = "Pairing failed. Check the code shown on the PC and try again." }
+        _pcBusy.value = false
+    }
+
+    fun unpairPc() = viewModelScope.launch {
+        services.secureKeyStorage.clearPcRelayCredentials()
+        _pcMessage.value = null
+    }
+
+    /** A PC action is an ordinary item: the action id in deviceId, its value (shortcut, URL) in deviceSku. */
+    fun savePcItem(existing: TagEntity?, action: String, value: String, name: String) = viewModelScope.launch {
+        val label = com.arbhlabs.taprelay.pc.PcRelayAction.label(action)
+        val entity = (existing ?: newItem(prefix = "pc", name = name, iconKey = "pc")).copy(
+            friendlyName = name.ifBlank { label },
+            targetType = TargetType.PC_RELAY,
+            providerId = "windows",
+            deviceId = action,
+            deviceSku = value.trim()
+        )
+        persist(existing, entity)
+    }
+
     // ---- Magic Actions and the other non-device items -------------------------------------
 
     /**

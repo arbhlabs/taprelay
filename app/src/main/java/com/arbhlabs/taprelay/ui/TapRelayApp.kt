@@ -76,6 +76,7 @@ import com.arbhlabs.taprelay.domain.provider.TUYA_PROVIDER_ID
 import com.arbhlabs.taprelay.ui.components.TapRelayPill
 import com.arbhlabs.taprelay.ui.actions.ActionsScreen
 import com.arbhlabs.taprelay.ui.lastdose.LastDoseScreen
+import androidx.compose.material.icons.filled.Computer
 import com.arbhlabs.taprelay.ui.remote.AodSettingsScreen
 import com.arbhlabs.taprelay.ui.places.PlacesScreen
 import com.arbhlabs.taprelay.ui.quick.QuickControlsSheet
@@ -110,6 +111,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
     var showControllers by rememberSaveable { mutableStateOf(false) }
     var showPlaces by rememberSaveable { mutableStateOf(false) }
     var showLastDose by rememberSaveable { mutableStateOf(false) }
+    var showPc by rememberSaveable { mutableStateOf(false) }
     var showActions by rememberSaveable { mutableStateOf(false) }
     var showAodSettings by rememberSaveable { mutableStateOf(false) }
 
@@ -154,6 +156,11 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                 )
             }
 
+            showPc -> {
+                BackHandler { showPc = false }
+                com.arbhlabs.taprelay.ui.pc.PcRelayScreen(vm = vm, onDone = { showPc = false })
+            }
+
             showActions -> {
                 // The screen owns its own Back, including the editors nested inside it.
                 ActionsScreen(vm = vm, onDone = { showActions = false })
@@ -187,6 +194,7 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     onOpenControllers = { showControllers = true },
                     onOpenPlaces = { showPlaces = true },
                     onOpenLastDose = { showLastDose = true },
+                    onOpenPc = { showPc = true },
                     onOpenActions = { showActions = true },
                     onOpenAodSettings = { showAodSettings = true },
                     onOpenPro = { showProDialog = true },
@@ -677,6 +685,7 @@ private fun HomeScreen(
     onOpenControllers: () -> Unit,
     onOpenPlaces: () -> Unit,
     onOpenLastDose: () -> Unit,
+    onOpenPc: () -> Unit,
     onOpenActions: () -> Unit,
     onOpenAodSettings: () -> Unit,
     onOpenPro: () -> Unit,
@@ -749,6 +758,11 @@ private fun HomeScreen(
                             text = { Text("LastDose Logs") },
                             leadingIcon = { Icon(Icons.Default.Bolt, null) },
                             onClick = { menuOpen = false; onOpenLastDose() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Windows PC") },
+                            leadingIcon = { Icon(Icons.Default.Computer, null, tint = MaterialTheme.colorScheme.primary) },
+                            onClick = { menuOpen = false; onOpenPc() }
                         )
                         DropdownMenuItem(
                             text = { Text("Always-on face") },
