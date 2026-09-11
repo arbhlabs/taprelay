@@ -329,7 +329,8 @@ class ActionExecutor(
                 actionDescription = "$completed/$actionCount steps",
                 success = allDone,
                 errorMessage = failures.firstOrNull(),
-                durationMs = duration
+                durationMs = duration,
+                heartRateBpm = if (allDone) pulseNow() else null
             )
         )
         if (allDone) tags.updateStateAndTimestamp(tag.tagId, 1, System.currentTimeMillis())
@@ -700,7 +701,8 @@ class ActionExecutor(
                 providerId = providerId,
                 actionDescription = logDescription,
                 success = true,
-                durationMs = duration
+                durationMs = duration,
+                heartRateBpm = pulseNow()
             )
         )
         val text = if (useTagName) "${tag.friendlyName} • $userSummary" else userSummary
@@ -710,6 +712,14 @@ class ActionExecutor(
             }
         }
         return TapOutcome(success = true, summary = text)
+    }
+
+    /**
+     * The live pulse to stamp on a history row. Read-only IPC into LastDose, off the main thread;
+     * null when LastDose has no fresh band reading, so no row ever carries a stale or made-up value.
+     */
+    private suspend fun pulseNow(): Int? = lastDose?.let { client ->
+        withContext(Dispatchers.IO) { runCatching { client.liveHeartRate() }.getOrNull() }
     }
 
     private suspend fun finishFailure(

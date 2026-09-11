@@ -14,6 +14,18 @@ data class LastDoseItem(
     val defaultAmount: String
 )
 
+data class LastDoseLatestEvent(
+    val eventId: Long,
+    val eventTime: Long,
+    val amount: String,
+    val unit: String,
+    val itemName: String,
+    val lastHeartRate: Int?,
+    val intervalMinutes: Int,
+    /** Visible logs since local midnight, or null when this LastDose does not report it. */
+    val countToday: Int?
+)
+
 /** What came back from a log attempt. [LastDoseResult.Logged] is the only success. */
 sealed interface LastDoseResult {
     /** LastDose created the event and read it back. */
@@ -49,6 +61,7 @@ class LastDoseClient(private val context: Context) {
         const val METHOD_CONTRACT = "contract"
         const val METHOD_ITEMS = "items"
         const val METHOD_LOG = "log"
+        const val METHOD_LATEST_EVENT = "latest_event"
 
         const val KEY_ITEM_ID = "itemId"
         const val KEY_AMOUNT = "amount"
@@ -60,6 +73,11 @@ class LastDoseClient(private val context: Context) {
         const val KEY_DEFAULT_AMOUNT = "defaultAmount"
         const val KEY_ITEMS = "items"
         const val KEY_CONTRACT_VERSION = "contractVersion"
+        const val KEY_EVENT_TIME = "eventTime"
+        const val KEY_HAS_EVENT = "hasEvent"
+        const val KEY_LAST_HEART_RATE = "lastHeartRate"
+        const val KEY_INTERVAL_MINUTES = "intervalMinutes"
+        const val KEY_COUNT_TODAY = "countToday"
 
         const val STATUS_LOGGED = "LOGGED"
         const val STATUS_DUPLICATE = "DUPLICATE_IGNORED"
@@ -147,6 +165,26 @@ class LastDoseClient(private val context: Context) {
      */
     fun liveHeartRate(): Int? = call("live_hr", null)?.let { result ->
         if (result.getBoolean("fresh", false)) result.getInt("bpm", 0).takeIf { it > 0 } else null
+    }
+
+    /** Latest visible log for a configured item, or null when it has never been logged. */
+    fun latestEvent(itemId: Long): LastDoseLatestEvent? {
+        if (itemId <= 0L) return null
+        val result = call(METHOD_LATEST_EVENT, Bundle().apply { putLong(KEY_ITEM_ID, itemId) })
+            ?: return null
+        if (!result.getBoolean(KEY_HAS_EVENT, false)) return null
+        val eventTime = result.getLong(KEY_EVENT_TIME, 0L)
+        if (eventTime <= 0L) return null
+        return LastDoseLatestEvent(
+            eventId = result.getLong(KEY_EVENT_ID, 0L),
+            eventTime = eventTime,
+            amount = result.getString(KEY_AMOUNT).orEmpty(),
+            unit = result.getString(KEY_UNIT).orEmpty(),
+            itemName = result.getString(KEY_NAME).orEmpty(),
+            lastHeartRate = result.getInt(KEY_LAST_HEART_RATE, 0).takeIf { it > 0 },
+            intervalMinutes = result.getInt(KEY_INTERVAL_MINUTES, 0).coerceAtLeast(0),
+            countToday = if (result.containsKey(KEY_COUNT_TODAY)) result.getInt(KEY_COUNT_TODAY) else null
+        )
     }
 
     fun isInstalled(): Boolean = runCatching {

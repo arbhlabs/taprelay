@@ -20,7 +20,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -95,28 +101,37 @@ fun AodStatusLine(
     connected: Boolean,
     accent: Color,
     automaticControls: String? = null,
-    heartRate: Int? = null,
+    /** Set when the pulse is shown in its compact form, in place of the wordmark. */
+    compactHeartRate: Int? = null,
+    heartColor: Color = HeartRed,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-    if (heartRate != null) {
-        // Live pulse from the band, via LastDose. Only drawn while a fresh reading exists.
-        Text(
-            "♥  $heartRate BPM",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFFFF4858),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
-        )
-    }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            "TAPRELAY",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 2.4.sp,
-            color = Color.White.copy(alpha = 0.38f)
-        )
+        if (compactHeartRate != null) {
+            Icon(
+                Icons.Default.Favorite,
+                contentDescription = null,
+                tint = heartColor,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "$compactHeartRate BPM",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = heartColor,
+                modifier = Modifier.semantics { contentDescription = "Heart rate $compactHeartRate beats per minute" }
+            )
+        } else {
+            Text(
+                "TAPRELAY",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 2.4.sp,
+                color = Color.White.copy(alpha = 0.38f)
+            )
+        }
         Spacer(Modifier.weight(1f))
         Box(
             Modifier
@@ -146,144 +161,6 @@ fun AodStatusLine(
             modifier = Modifier.fillMaxWidth().padding(top = 5.dp)
         )
     }
-    }
-}
-
-/**
- * The one favourite that gets the most room.
- *
- * Deliberately an outline rather than a filled slab: on black, a hairline border and a large label
- * read as a button without lighting a whole rectangle of the panel.
- */
-@Composable
-fun AodPrimaryTile(
-    tag: TagEntity,
-    subtitle: String,
-    state: TileState,
-    accent: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val armed = state == TileState.ARMED
-    val border by animateFloatAsState(if (armed) 1f else 0.16f, tween(160), label = "primaryBorder")
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(26.dp),
-        color = if (armed) accent.copy(alpha = 0.12f) else Color.Transparent,
-        contentColor = Color.White,
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 96.dp)
-            .border(1.dp, accent.copy(alpha = border), RoundedCornerShape(26.dp))
-            .semantics {
-                role = Role.Button
-                contentDescription = if (armed) {
-                    "${tag.friendlyName}. Tap again to run."
-                } else {
-                    "${tag.friendlyName}. $subtitle"
-                }
-            }
-    ) {
-        Row(
-            Modifier.padding(horizontal = 22.dp, vertical = 20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                iconFor(tag.iconKey),
-                contentDescription = null,
-                tint = if (armed) accent else Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.size(26.dp)
-            )
-            Spacer(Modifier.width(18.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    tag.friendlyName.uppercase(),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.2.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    if (armed) "Tap again to run" else subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (armed) accent else Color.White.copy(alpha = 0.4f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (state == TileState.RUNNING) {
-                AodSpinner(accent)
-            }
-        }
-    }
-}
-
-/** A secondary favourite. Same language as the primary, half the height. */
-@Composable
-fun AodTile(
-    tag: TagEntity,
-    subtitle: String,
-    state: TileState,
-    accent: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val armed = state == TileState.ARMED
-    val border by animateFloatAsState(if (armed) 1f else 0.13f, tween(160), label = "tileBorder")
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = if (armed) accent.copy(alpha = 0.12f) else Color.Transparent,
-        contentColor = Color.White,
-        modifier = modifier
-            // 64dp clears the 48dp minimum touch target with room to spare on a face that is
-            // pressed without looking closely at it.
-            .heightIn(min = 68.dp)
-            .border(1.dp, accent.copy(alpha = border), RoundedCornerShape(20.dp))
-            .semantics {
-                role = Role.Button
-                contentDescription = if (armed) {
-                    "${tag.friendlyName}. Tap again to run."
-                } else {
-                    "${tag.friendlyName}. $subtitle"
-                }
-            }
-    ) {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                iconFor(tag.iconKey),
-                contentDescription = null,
-                tint = if (armed) accent else Color.White.copy(alpha = 0.72f),
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    tag.friendlyName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    if (armed) "Tap again" else subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (armed) accent else Color.White.copy(alpha = 0.35f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (state == TileState.RUNNING) {
-                AodSpinner(accent, size = 14)
-            }
-        }
     }
 }
 
@@ -369,7 +246,7 @@ fun AodEmpty(onOpenSettings: () -> Unit) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Choose the actions you want on this face in TapRelay → Always-on face.",
+            "Choose the actions you want on this face in TapRelay → AOD.",
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.38f)
         )
@@ -388,6 +265,299 @@ fun AodEmpty(onOpenSettings: () -> Unit) {
                 Modifier.padding(horizontal = 20.dp, vertical = 13.dp),
                 style = MaterialTheme.typography.labelLarge
             )
+        }
+    }
+}
+
+val HeartRed = Color(0xFFFF4858)
+
+/** Tabular figures, so a ticking timer never shuffles sideways as its digits change. */
+private val Tabular = TextStyle(fontFeatureSettings = "tnum")
+
+/**
+ * The live pulse in its large form: a vector heart and the number, weighted like LastDose's face.
+ * Nothing is drawn without a fresh reading - a stale number on an always-on face is worse than none.
+ */
+@Composable
+fun AodHeartRate(bpm: Int, color: Color, dim: Boolean, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = "Heart rate $bpm beats per minute"
+        },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.Favorite,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(if (dim) 26.dp else 34.dp)
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(
+            "$bpm",
+            fontSize = if (dim) 38.sp else 50.sp,
+            fontWeight = FontWeight.Medium,
+            color = color,
+            style = Tabular
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "BPM",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 1.5.sp,
+            color = color.copy(alpha = 0.6f),
+            modifier = Modifier.padding(top = 10.dp)
+        )
+    }
+}
+
+/** "Last logged Today · 21:42 · ♥ 106 BPM", with the heart in the pulse colour. */
+private fun metaLine(
+    log: AodLogState,
+    nowMillis: Long,
+    showHeartRate: Boolean,
+    heartColor: Color,
+    prefix: String
+): AnnotatedString = buildAnnotatedString {
+    val lastAt = log.lastAt
+    if (lastAt == null) {
+        append("Not logged yet")
+        return@buildAnnotatedString
+    }
+    append(prefix)
+    append(AodLogFormat.whenLogged(lastAt, nowMillis))
+    log.detail?.let { append(" · $it") }
+    val hr = if (showHeartRate) AodLogFormat.heartRate(log.heartRate) else null
+    if (hr != null) {
+        append(" · ")
+        withStyle(SpanStyle(color = heartColor)) { append(hr) }
+    }
+}
+
+/**
+ * The first favourite, as a LastDose-style log card: what it is, how long ago it last happened in
+ * large figures, when exactly and at what pulse, and one clear control to do it again.
+ *
+ * While dozing the card keeps its timer and loses everything else - the border, the control and
+ * the seconds - so the one number that matters stays readable from across the room.
+ */
+@Composable
+fun AodLogCard(
+    tag: TagEntity,
+    label: String,
+    log: AodLogState,
+    nowMillis: Long,
+    state: TileState,
+    accent: Color,
+    heartColor: Color,
+    showHeartRate: Boolean,
+    dozing: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val armed = state == TileState.ARMED
+    val border by animateFloatAsState(
+        when { dozing -> 0f; armed -> 1f; else -> 0.16f }, tween(160), label = "cardBorder"
+    )
+    val lastAt = log.lastAt
+    val elapsed = lastAt?.let { AodLogFormat.elapsed(it, nowMillis, withSeconds = !dozing) }
+    val count = AodLogFormat.count(log.countToday)
+    val verb = if (tag.isLastDose) "Log now" else "Run now"
+
+    Surface(
+        onClick = onClick,
+        enabled = !dozing,
+        shape = RoundedCornerShape(28.dp),
+        color = if (armed) accent.copy(alpha = 0.10f) else Color.Transparent,
+        contentColor = Color.White,
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, accent.copy(alpha = border), RoundedCornerShape(28.dp))
+            .semantics {
+                role = Role.Button
+                contentDescription = buildString {
+                    append(label)
+                    append(". ")
+                    append(if (elapsed != null) "$elapsed ago" else "Not logged yet")
+                    if (armed) append(". Tap again to ${verb.lowercase()}.")
+                }
+            }
+    ) {
+        Column(Modifier.padding(horizontal = 22.dp, vertical = if (dozing) 12.dp else 20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    iconFor(tag.iconKey),
+                    contentDescription = null,
+                    tint = if (armed) accent else Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    label.uppercase(),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.6.sp,
+                    color = Color.White.copy(alpha = 0.62f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (count != null) {
+                    Text(
+                        count,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.45f)
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                elapsed ?: "—",
+                fontSize = if (dozing) 44.sp else 58.sp,
+                fontWeight = FontWeight.Light,
+                color = if (elapsed != null) Color.White else Color.White.copy(alpha = 0.35f),
+                style = Tabular,
+                maxLines = 1
+            )
+            Text(
+                metaLine(log, nowMillis, showHeartRate, heartColor, prefix = "Last logged "),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.5f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!dozing) {
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.weight(1f))
+                    if (state == TileState.RUNNING) {
+                        AodSpinner(accent)
+                    } else {
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (armed) accent else Color.Transparent)
+                                .border(
+                                    1.dp,
+                                    if (armed) accent else Color.White.copy(alpha = 0.28f),
+                                    RoundedCornerShape(50)
+                                )
+                                .padding(horizontal = 18.dp, vertical = 9.dp)
+                        ) {
+                            Text(
+                                if (armed) "TAP AGAIN" else verb.uppercase(),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.2.sp,
+                                color = if (armed) Color.Black else Color.White.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Every other favourite: one full-width row, name and when on the left, the timer on the right.
+ * Full width rather than half-width tiles, so a log name and its timer never truncate each other.
+ */
+@Composable
+fun AodLogRow(
+    tag: TagEntity,
+    label: String,
+    log: AodLogState,
+    nowMillis: Long,
+    state: TileState,
+    accent: Color,
+    heartColor: Color,
+    showHeartRate: Boolean,
+    dozing: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val armed = state == TileState.ARMED
+    val border by animateFloatAsState(
+        when { dozing -> 0f; armed -> 1f; else -> 0.12f }, tween(160), label = "rowBorder"
+    )
+    val lastAt = log.lastAt
+    val elapsed = lastAt?.let { AodLogFormat.elapsed(it, nowMillis, withSeconds = !dozing) }
+    val count = AodLogFormat.count(log.countToday)
+
+    Surface(
+        onClick = onClick,
+        enabled = !dozing,
+        shape = RoundedCornerShape(20.dp),
+        color = if (armed) accent.copy(alpha = 0.10f) else Color.Transparent,
+        contentColor = Color.White,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = if (dozing) 0.dp else 64.dp)
+            .border(1.dp, accent.copy(alpha = border), RoundedCornerShape(20.dp))
+            .semantics {
+                role = Role.Button
+                contentDescription = buildString {
+                    append(label)
+                    append(". ")
+                    append(if (elapsed != null) "$elapsed ago" else "Not logged yet")
+                    if (armed) append(". Tap again to run.")
+                }
+            }
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = if (dozing) 6.dp else 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                iconFor(tag.iconKey),
+                contentDescription = null,
+                tint = if (armed) accent else Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!dozing) {
+                    Text(
+                        if (armed) AnnotatedString("Tap again to run")
+                        else metaLine(log, nowMillis, showHeartRate, heartColor, prefix = ""),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (armed) accent else Color.White.copy(alpha = 0.42f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            if (state == TileState.RUNNING) {
+                AodSpinner(accent, size = 14)
+            } else {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        elapsed ?: "—",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Light,
+                        color = if (elapsed != null) Color.White else Color.White.copy(alpha = 0.35f),
+                        style = Tabular,
+                        maxLines = 1
+                    )
+                    if (count != null && !dozing) {
+                        Text(
+                            count,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+            }
         }
     }
 }

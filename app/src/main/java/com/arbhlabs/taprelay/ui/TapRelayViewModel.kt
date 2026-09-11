@@ -1150,6 +1150,12 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun unpairPc() = viewModelScope.launch {
+        val credentials = pcRelayCredentials.first()
+        if (credentials != null) {
+            com.arbhlabs.taprelay.pc.PcRelayClient(
+                services.pcRelayHttp, credentials.baseUrl, credentials.token, credentials.ownerId
+            ).unpair()
+        }
         services.secureKeyStorage.clearPcRelayCredentials()
         _pcMessage.value = null
     }
@@ -1394,9 +1400,35 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val aodDensity: StateFlow<AodDensity> = services.preferences.aodDensity
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AodDensity.NORMAL)
+    val aodScale: StateFlow<Float> = services.preferences.aodScale
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1f)
 
     fun setAodDensity(value: AodDensity) = viewModelScope.launch {
         services.preferences.setAodDensity(value)
+        services.preferences.setAodScale(1f)
+    }
+
+    fun setAodScale(value: Float) = viewModelScope.launch {
+        services.preferences.setAodScale(value)
+    }
+
+    val aodHrStyle: StateFlow<com.arbhlabs.taprelay.data.prefs.AodHrStyle> = services.preferences.aodHrStyle
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.arbhlabs.taprelay.data.prefs.AodHrStyle.HERO)
+    val aodHrColor: StateFlow<com.arbhlabs.taprelay.data.prefs.AodHrColor> = services.preferences.aodHrColor
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.arbhlabs.taprelay.data.prefs.AodHrColor.RED)
+    val aodLogHeartRate: StateFlow<Boolean> = services.preferences.aodLogHeartRate
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setAodHrStyle(value: com.arbhlabs.taprelay.data.prefs.AodHrStyle) = viewModelScope.launch {
+        services.preferences.setAodHrStyle(value)
+    }
+
+    fun setAodHrColor(value: com.arbhlabs.taprelay.data.prefs.AodHrColor) = viewModelScope.launch {
+        services.preferences.setAodHrColor(value)
+    }
+
+    fun setAodLogHeartRate(value: Boolean) = viewModelScope.launch {
+        services.preferences.setAodLogHeartRate(value)
     }
 
     fun setControllerRumble(value: Boolean) = viewModelScope.launch {

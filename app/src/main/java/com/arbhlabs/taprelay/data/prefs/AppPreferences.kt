@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import com.arbhlabs.taprelay.controller.AdjustmentConfig
 import com.arbhlabs.taprelay.controller.AdjustmentStick
+import kotlin.math.roundToInt
 
 private val Context.appPrefs by preferencesDataStore(name = "app_prefs")
 
@@ -37,6 +38,53 @@ enum class AodDensity(
     }
 }
 
+/** How the live pulse sits on the always-on face. */
+enum class AodHrStyle(val label: String) {
+    /** Its own large line under the clock: the second thing the eye finds. */
+    HERO("Large"),
+    /** A small line beside the wordmark, for faces where the logs matter more. */
+    COMPACT("Compact"),
+    OFF("Hidden");
+
+    companion object {
+        fun fromName(value: String?): AodHrStyle =
+            runCatching { value?.let { valueOf(it) } }.getOrNull() ?: HERO
+    }
+}
+
+/** The pulse colour. White is the dimmest on an OLED; red matches LastDose. */
+enum class AodHrColor(val label: String, val argb: Long) {
+    RED("Red", 0xFFFF4858),
+    ACCENT("Accent", 0),
+    WHITE("White", 0xFFFFFFFF);
+
+    companion object {
+        fun fromName(value: String?): AodHrColor =
+            runCatching { value?.let { valueOf(it) } }.getOrNull() ?: RED
+    }
+}
+
+data class AodLayout(
+    val clockSp: Int,
+    val gap: Dp,
+    val rowGap: Dp,
+    val rowPadding: Dp,
+    val sidePadding: Dp,
+    val showDiagram: Boolean
+)
+
+fun AodDensity.layout(scale: Float): AodLayout {
+    val factor = scale.coerceIn(0.75f, 1.35f)
+    return AodLayout(
+        clockSp = (clockSp * factor).roundToInt(),
+        gap = gap * factor,
+        rowGap = rowGap * factor,
+        rowPadding = rowPadding * factor,
+        sidePadding = sidePadding * factor,
+        showDiagram = showDiagram
+    )
+}
+
 class AppPreferences(private val context: Context) {
     private val onboardedKey = booleanPreferencesKey("onboarding_complete")
     private val controllerRumbleKey = booleanPreferencesKey("controller_rumble")
@@ -44,10 +92,14 @@ class AppPreferences(private val context: Context) {
     private val automaticHapticSignaturesKey = booleanPreferencesKey("automatic_haptic_signatures")
     private val remoteAutoDimKey = booleanPreferencesKey("remote_auto_dim")
     private val aodDensityKey = stringPreferencesKey("aod_density")
+    private val aodScaleKey = stringPreferencesKey("aod_scale")
     private val aodFavouritesKey = stringPreferencesKey("aod_favourites")
     private val aodShowClockKey = booleanPreferencesKey("aod_show_clock")
     private val aodConfirmKey = booleanPreferencesKey("aod_confirm_actions")
     private val aodMonochromeKey = booleanPreferencesKey("aod_monochrome")
+    private val aodHrStyleKey = stringPreferencesKey("aod_hr_style")
+    private val aodHrColorKey = stringPreferencesKey("aod_hr_color")
+    private val aodLogHrKey = booleanPreferencesKey("aod_log_hr")
     private val adjustmentEnabledKey = booleanPreferencesKey("post_adjustment_enabled")
     private val adjustmentStickKey = stringPreferencesKey("post_adjustment_stick")
     private val adjustmentDurationKey = stringPreferencesKey("post_adjustment_duration_ms")
@@ -98,6 +150,14 @@ class AppPreferences(private val context: Context) {
         context.appPrefs.edit { it[aodDensityKey] = value.name }
     }
 
+    val aodScale: Flow<Float> = context.appPrefs.data.map {
+        it[aodScaleKey]?.toFloatOrNull()?.coerceIn(0.75f, 1.35f) ?: 1f
+    }
+
+    suspend fun setAodScale(value: Float) {
+        context.appPrefs.edit { it[aodScaleKey] = value.coerceIn(0.75f, 1.35f).toString() }
+    }
+
     /**
      * The items the always-on face offers, in the order they are shown. Stored as ids rather than
      * a flag on the item, so reordering never rewrites the tags table and a deleted item simply
@@ -136,6 +196,28 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAodMonochrome(value: Boolean) {
         context.appPrefs.edit { it[aodMonochromeKey] = value }
+    }
+
+    val aodHrStyle: Flow<AodHrStyle> =
+        context.appPrefs.data.map { AodHrStyle.fromName(it[aodHrStyleKey]) }
+
+    suspend fun setAodHrStyle(value: AodHrStyle) {
+        context.appPrefs.edit { it[aodHrStyleKey] = value.name }
+    }
+
+    val aodHrColor: Flow<AodHrColor> =
+        context.appPrefs.data.map { AodHrColor.fromName(it[aodHrColorKey]) }
+
+    suspend fun setAodHrColor(value: AodHrColor) {
+        context.appPrefs.edit { it[aodHrColorKey] = value.name }
+    }
+
+    /** Whether each log on the face shows the pulse recorded with it ("♥ 106 BPM"). */
+    val aodLogHeartRate: Flow<Boolean> =
+        context.appPrefs.data.map { it[aodLogHrKey] ?: true }
+
+    suspend fun setAodLogHeartRate(value: Boolean) {
+        context.appPrefs.edit { it[aodLogHrKey] = value }
     }
 
     suspend fun setOnboardingComplete(value: Boolean) {

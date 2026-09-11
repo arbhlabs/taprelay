@@ -1,5 +1,15 @@
 # TapRelay Changelog
 
+## v0.6.5 - 2026-09-11 (Alpha / Internal Test)
+
+### Added
+- AOD log cards: each favourite shows how long since it last ran, "Last logged Today · 21:42 ·
+  ♥ 106 BPM" and how many times today, read from real history (LastDose items from LastDose,
+  needs 7.2.12+ for the today count). Timers stay visible while the face is dimmed.
+- Heart-rate options on the AOD: Large / Compact / Hidden, red / accent / white, and pulse on each log.
+- "Favourite on the AOD" switch on every item; same list as AOD settings.
+- Each run records your live pulse (when fresh) in history.
+
 ## v0.6.4 - 2026-09-11 (Alpha / Internal Test)
 
 ### Added

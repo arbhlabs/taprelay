@@ -236,7 +236,9 @@ fun TapRelayApp(vm: TapRelayViewModel) {
                     onChangeMapping = { vm.editTag(target); vm.closeItem() },
                     onTest = { vm.testTag(target) },
                     onQuickControls = { vm.closeItem(); vm.openQuickControls(target.tagId) },
-                    onDelete = { vm.deleteTag(target); vm.closeItem() }
+                    onDelete = { vm.deleteTag(target); vm.closeItem() },
+                    onAod = vm.aodFavourites.collectAsState().value.contains(target.tagId),
+                    onToggleAod = { vm.toggleAodFavourite(target.tagId) }
                 )
             }
         }
@@ -765,7 +767,7 @@ private fun HomeScreen(
                             onClick = { menuOpen = false; onOpenPc() }
                         )
                         DropdownMenuItem(
-                            text = { Text("Always-on face") },
+                            text = { Text("AOD") },
                             leadingIcon = { Icon(Icons.Default.Smartphone, null) },
                             onClick = { menuOpen = false; onOpenAodSettings() }
                         )
@@ -971,7 +973,9 @@ private fun HomeScreen(
             onChangeMapping = { vm.editTag(tag); detail = null },
             onTest = { vm.testTag(tag) },
             onQuickControls = { detail = null; vm.openQuickControls(tag.tagId) },
-            onDelete = { vm.deleteTag(tag); detail = null }
+            onDelete = { vm.deleteTag(tag); detail = null },
+            onAod = vm.aodFavourites.collectAsState().value.contains(tag.tagId),
+            onToggleAod = { vm.toggleAodFavourite(tag.tagId) }
         )
     }
 }
@@ -986,7 +990,9 @@ private fun TagDetailSheet(
     onChangeMapping: () -> Unit,
     onTest: () -> Unit,
     onQuickControls: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onAod: Boolean = false,
+    onToggleAod: () -> Unit = {}
 ) {
     var name by remember(tag.tagId) { mutableStateOf(tag.friendlyName) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -1011,6 +1017,18 @@ private fun TagDetailSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Enabled", Modifier.weight(1f))
                 Switch(checked = tag.enabled, onCheckedChange = onToggleEnabled)
+            }
+            // The same favourites list AOD settings edits: one source of truth, not a second flag.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Favourite on the AOD")
+                    Text(
+                        "Shows when it last ran, how often today and your pulse, on the always-on face.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = onAod, onCheckedChange = { onToggleAod() })
             }
             Text(
                 "Currently ${tagActionSummary(tag).lowercase()} on ${tag.allTargets.joinToString { it.name.ifBlank { if (tag.providerId == SENSIBO_PROVIDER_ID) "a device" else "a light" } }}. " +

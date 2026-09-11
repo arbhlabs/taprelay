@@ -49,7 +49,8 @@ class ServiceLocator(context: Context) {
         AppDatabase.MIGRATION_7_8,
         AppDatabase.MIGRATION_8_9,
         AppDatabase.MIGRATION_9_10,
-        AppDatabase.MIGRATION_10_11
+        AppDatabase.MIGRATION_10_11,
+        AppDatabase.MIGRATION_11_12
     )
      // No destructive fallback: a missing migration must fail loudly rather than
      // silently deleting every tag mapping the owner has set up.

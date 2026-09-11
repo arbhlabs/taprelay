@@ -69,8 +69,14 @@ import com.arbhlabs.taprelay.TapRelayApplication
 import com.arbhlabs.taprelay.controller.ControllerManager
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.data.prefs.AodDensity
+import com.arbhlabs.taprelay.data.prefs.AodHrColor
+import com.arbhlabs.taprelay.data.prefs.AodHrStyle
+import com.arbhlabs.taprelay.data.prefs.layout
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.arbhlabs.taprelay.di.ServiceLocator
 import com.arbhlabs.taprelay.execution.TapFeedback
+import com.arbhlabs.taprelay.execution.lastdose.LastDoseLatestEvent
 import com.arbhlabs.taprelay.trigger.ActivationPresenter
 import com.arbhlabs.taprelay.trigger.TriggerSource
 import com.arbhlabs.taprelay.ui.MainActivity
@@ -83,6 +89,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 /**
  * The always-on face: TapRelay as a physical remote that happens to live on a phone.
@@ -114,6 +121,9 @@ class RemoteModeActivity : ComponentActivity() {
 
     private val feedback = MutableStateFlow<TapFeedback?>(null)
     private val result = MutableStateFlow<AodOutcome?>(null)
+
+    /** Bumped when something settles, so LastDose-backed logs re-read at once instead of in 2 s. */
+    private val refresh = MutableStateFlow(0)
 
     /** What the face shows after something ran, and when it should fade back to ambient. */
     private data class AodOutcome(
@@ -160,12 +170,20 @@ class RemoteModeActivity : ComponentActivity() {
             .stateIn(lifecycleScope, SharingStarted.Eagerly, true)
         val densityPref: StateFlow<AodDensity> = services.preferences.aodDensity
             .stateIn(lifecycleScope, SharingStarted.Eagerly, AodDensity.NORMAL)
+        val scalePref = services.preferences.aodScale
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, 1f)
         val showClockPref: StateFlow<Boolean> = services.preferences.aodShowClock
             .stateIn(lifecycleScope, SharingStarted.Eagerly, true)
         val confirmPref: StateFlow<Boolean> = services.preferences.aodConfirmActions
             .stateIn(lifecycleScope, SharingStarted.Eagerly, true)
         val monoPref: StateFlow<Boolean> = services.preferences.aodMonochrome
             .stateIn(lifecycleScope, SharingStarted.Eagerly, false)
+        val hrStylePref: StateFlow<AodHrStyle> = services.preferences.aodHrStyle
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, AodHrStyle.HERO)
+        val hrColorPref: StateFlow<AodHrColor> = services.preferences.aodHrColor
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, AodHrColor.RED)
+        val logHrPref: StateFlow<Boolean> = services.preferences.aodLogHeartRate
+            .stateIn(lifecycleScope, SharingStarted.Eagerly, true)
 
         setContent {
             TapRelayTheme {
@@ -179,26 +197,23 @@ class RemoteModeActivity : ComponentActivity() {
                 val automaticControls by controllerManager.automaticLightControlState.collectAsState()
                 val dimWhenIdle by autoDim.collectAsState()
                 val aod by densityPref.collectAsState()
+                val aodScale by scalePref.collectAsState()
                 val showClock by showClockPref.collectAsState()
                 val confirmFirst by confirmPref.collectAsState()
                 val monochrome by monoPref.collectAsState()
+                val hrStyle by hrStylePref.collectAsState()
+                val hrColorChoice by hrColorPref.collectAsState()
+                val logHeartRate by logHrPref.collectAsState()
+                val refreshTick by refresh.collectAsState()
 
                 var awake by remember { mutableLongStateOf(System.currentTimeMillis()) }
                 var now by remember { mutableStateOf(LocalDateTime.now()) }
+                var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
                 var shift by remember { mutableStateOf(0) }
                 var armedId by remember { mutableStateOf<String?>(null) }
                 var runningId by remember { mutableStateOf<String?>(null) }
                 var heartRate by remember { mutableStateOf<Int?>(null) }
-
-                // Live pulse from the band, read from LastDose (which receives the TiltTrace stream).
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        heartRate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            services.lastDoseClient.liveHeartRate()
-                        }
-                        kotlinx.coroutines.delay(2_000L)
-                    }
-                }
+                var latestLastDose by remember { mutableStateOf<Map<Long, LastDoseLatestEvent>>(emptyMap()) }
 
                 val bright = !dimWhenIdle ||
                     quick.open ||
@@ -207,11 +222,46 @@ class RemoteModeActivity : ComponentActivity() {
                     (lastInput?.second ?: 0L) > System.currentTimeMillis() - BRIGHT_MS
                 val dozing = !bright
 
+                // TapRelay's own history for every favourite: a Room flow, so a run from NFC, a
+                // controller, a widget or this face shows up here the moment its row is written.
+                // Re-keyed at midnight so "today" counts reset without leaving the face.
+                val today = now.toLocalDate()
+                val tapSummaries by remember(favourites, today) {
+                    services.tapLogDao.summaries(
+                        favourites,
+                        today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    )
+                }.collectAsState(initial = emptyList())
+
+                // LastDose owns its own logs (they can be made inside LastDose too), and the live
+                // pulse comes from it as well. Read-only IPC: every 2 s while awake, every 30 s
+                // dozing, and immediately after something on this face ran.
+                LaunchedEffect(items, favourites, dozing, refreshTick) {
+                    while (true) {
+                        val (pulse, events) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            val pulse = services.lastDoseClient.liveHeartRate()
+                            val current = mutableMapOf<Long, LastDoseLatestEvent>()
+                            items.asSequence()
+                                .filter { it.enabled && it.isLastDose && it.tagId in favourites }
+                                .mapNotNull { it.lastDoseItemId }
+                                .distinct()
+                                .forEach { itemId ->
+                                    services.lastDoseClient.latestEvent(itemId)?.let { current[itemId] = it }
+                                }
+                            pulse to current
+                        }
+                        heartRate = pulse
+                        latestLastDose = events
+                        delay(if (dozing) 30_000L else 2_000L)
+                    }
+                }
+
                 // Clock tick, and the burn-in drift that rides along with it. While dozing this
                 // wakes only on the minute, so the panel is asked to draw about sixty times less.
                 LaunchedEffect(dozing) {
                     while (true) {
                         now = LocalDateTime.now()
+                        nowMillis = System.currentTimeMillis()
                         shift = now.minute % 6
                         delay(
                             if (dozing) 60_000L - (System.currentTimeMillis() % 60_000L)
@@ -253,7 +303,24 @@ class RemoteModeActivity : ComponentActivity() {
                 )
 
                 val accent = if (monochrome) Color.White else MaterialTheme.colorScheme.primary
+                val heartColor = when {
+                    monochrome || hrColorChoice == AodHrColor.WHITE -> Color.White
+                    hrColorChoice == AodHrColor.ACCENT -> accent
+                    else -> Color(hrColorChoice.argb)
+                }
                 val resolved = remember(items, favourites) { resolveFavourites(items, favourites) }
+                val logs = remember(resolved, tapSummaries, latestLastDose) {
+                    val byTag = tapSummaries.associateBy { it.tagId }
+                    resolved.associate { tag ->
+                        tag.tagId to AodLogState.resolve(
+                            tag,
+                            byTag[tag.tagId],
+                            tag.lastDoseItemId?.let { latestLastDose[it] }
+                        )
+                    }
+                }
+                val pulse = heartRate.takeIf { hrStyle != AodHrStyle.OFF }
+                val layout = remember(aod, aodScale) { aod.layout(aodScale) }
 
                 Surface(
                     color = Color.Black,
@@ -288,25 +355,34 @@ class RemoteModeActivity : ComponentActivity() {
                                 .safeDrawingPadding()
                                 .offset(x = dx, y = dy)
                                 .alpha(contentAlpha)
-                                .padding(horizontal = aod.sidePadding, vertical = 10.dp)
+                                .padding(horizontal = layout.sidePadding, vertical = 10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.Top) {
                                 if (showClock) {
-                                    AodClock(now, if (landscape) aod.clockSp * 3 / 4 else aod.clockSp, dozing)
+                                    AodClock(now, if (landscape) layout.clockSp * 3 / 4 else layout.clockSp, dozing)
                                 }
                                 Spacer(Modifier.weight(1f))
                                 if (!dozing) {
                                     IconButton(onClick = { finish() }) {
                                         Icon(
                                             Icons.Default.Close,
-                                            contentDescription = "Leave the always-on face",
+                                            contentDescription = "Leave the AOD",
                                             tint = Color.White.copy(alpha = 0.35f)
                                         )
                                     }
                                 }
                             }
 
-                            Spacer(Modifier.height(if (dozing) 18.dp else aod.gap))
+                            Spacer(Modifier.height(if (dozing) 14.dp else layout.gap))
+
+                            if (hrStyle == AodHrStyle.HERO && pulse != null) {
+                                AodHeartRate(
+                                    bpm = pulse,
+                                    color = heartColor,
+                                    dim = dozing,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+                            }
 
                             AodStatusLine(
                                 controllerName = controllers.firstOrNull()?.name,
@@ -314,11 +390,32 @@ class RemoteModeActivity : ComponentActivity() {
                                 connected = controllers.isNotEmpty(),
                                 accent = accent,
                                 automaticControls = automaticControls.description,
-                                heartRate = heartRate
+                                compactHeartRate = pulse.takeIf { hrStyle == AodHrStyle.COMPACT },
+                                heartColor = heartColor
                             )
 
                             if (dozing) {
-                                Spacer(Modifier.weight(1f))
+                                // The logs stay: how long since the last one is the reason to
+                                // glance at an always-on face at all. Timers only, no controls.
+                                Spacer(Modifier.height(16.dp))
+                                if (resolved.isNotEmpty()) {
+                                    Favourites(
+                                        favourites = resolved,
+                                        logs = logs,
+                                        armedId = null,
+                                        runningId = null,
+                                        nowMillis = nowMillis,
+                                        accent = accent,
+                                        heartColor = heartColor,
+                                        showHeartRate = logHeartRate,
+                                        dozing = true,
+                                        landscape = landscape,
+                                        onPress = {},
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                } else {
+                                    Spacer(Modifier.weight(1f))
+                                }
                                 Text(
                                     "Slide to wake",
                                     style = MaterialTheme.typography.bodySmall,
@@ -329,7 +426,7 @@ class RemoteModeActivity : ComponentActivity() {
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                             } else {
-                                Spacer(Modifier.height(aod.gap + 8.dp))
+                                Spacer(Modifier.height(layout.gap + 4.dp))
 
                                 val current = outcome
                                 if (current != null) {
@@ -352,10 +449,16 @@ class RemoteModeActivity : ComponentActivity() {
                                 } else {
                                     Favourites(
                                         favourites = resolved,
+                                        logs = logs,
                                         armedId = armedId,
                                         runningId = runningId,
+                                        nowMillis = nowMillis,
                                         accent = accent,
+                                        heartColor = heartColor,
+                                        showHeartRate = logHeartRate,
+                                        dozing = false,
                                         landscape = landscape,
+                                        modifier = Modifier.weight(1f),
                                         onPress = { tag ->
                                             awake = System.currentTimeMillis()
                                             when {
@@ -368,7 +471,6 @@ class RemoteModeActivity : ComponentActivity() {
                                             }
                                         }
                                     )
-                                    Spacer(Modifier.weight(1f))
                                 }
                             }
                         }
@@ -436,6 +538,7 @@ class RemoteModeActivity : ComponentActivity() {
         ) { fb ->
             if (fb.pending) return@fire
             onSettled()
+            refresh.value++
             result.value = AodOutcome(
                 success = !fb.isError,
                 title = tag.friendlyName,
@@ -508,6 +611,7 @@ class RemoteModeActivity : ComponentActivity() {
         controllerManager.onFeedback = { fb ->
             feedback.value = fb
             if (!fb.pending) {
+                refresh.value++
                 result.value = AodOutcome(
                     success = !fb.isError,
                     title = fb.title.substringBefore(" • ").ifBlank { "Done" },
@@ -562,47 +666,62 @@ class RemoteModeActivity : ComponentActivity() {
 @Composable
 private fun Favourites(
     favourites: List<TagEntity>,
+    logs: Map<String, AodLogState>,
     armedId: String?,
     runningId: String?,
+    nowMillis: Long,
     accent: Color,
+    heartColor: Color,
+    showHeartRate: Boolean,
+    dozing: Boolean,
     landscape: Boolean,
-    onPress: (TagEntity) -> Unit
+    onPress: (TagEntity) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     fun stateOf(tag: TagEntity) = when (tag.tagId) {
         runningId -> TileState.RUNNING
         armedId -> TileState.ARMED
         else -> TileState.IDLE
     }
+    fun labelOf(tag: TagEntity) = tag.friendlyName.ifBlank { tag.lastDoseItemName.orEmpty() }
 
-    Column(verticalArrangement = Arrangement.spacedBy(if (landscape) 8.dp else 12.dp)) {
+    // Scrolls inside its own space, so many favourites never push the clock off a short screen.
+    Column(
+        modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(if (dozing) 4.dp else 10.dp)
+    ) {
         val primary = favourites.first()
-        // Landscape has too little height for a tall hero, so everything becomes a tile.
+        // Landscape has too little height for the large card, so everything becomes a row.
         if (!landscape) {
-            AodPrimaryTile(
+            AodLogCard(
                 tag = primary,
-                subtitle = aodSubtitle(primary),
+                label = labelOf(primary),
+                log = logs[primary.tagId] ?: AodLogState.NEVER,
+                nowMillis = nowMillis,
                 state = stateOf(primary),
                 accent = accent,
+                heartColor = heartColor,
+                showHeartRate = showHeartRate,
+                dozing = dozing,
                 onClick = { onPress(primary) }
             )
         }
 
         val rest = if (landscape) favourites else favourites.drop(1)
-        rest.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                row.forEach { tag ->
-                    AodTile(
-                        tag = tag,
-                        subtitle = aodSubtitle(tag),
-                        state = stateOf(tag),
-                        accent = accent,
-                        onClick = { onPress(tag) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                // Keeps a lone tile on the last row half-width rather than stretched across.
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
+        rest.forEach { tag ->
+            AodLogRow(
+                tag = tag,
+                label = labelOf(tag),
+                log = logs[tag.tagId] ?: AodLogState.NEVER,
+                nowMillis = nowMillis,
+                state = stateOf(tag),
+                accent = accent,
+                heartColor = heartColor,
+                showHeartRate = showHeartRate,
+                dozing = dozing,
+                onClick = { onPress(tag) }
+            )
         }
+        Spacer(Modifier.height(8.dp))
     }
 }

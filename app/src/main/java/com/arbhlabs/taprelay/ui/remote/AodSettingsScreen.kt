@@ -34,6 +34,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -54,6 +55,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
 import com.arbhlabs.taprelay.data.prefs.AodDensity
+import com.arbhlabs.taprelay.data.prefs.AodHrColor
+import com.arbhlabs.taprelay.data.prefs.AodHrStyle
 import com.arbhlabs.taprelay.ui.TapRelayViewModel
 import com.arbhlabs.taprelay.ui.iconFor
 
@@ -75,7 +78,11 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
     val confirmActions by vm.aodConfirmActions.collectAsState()
     val monochrome by vm.aodMonochrome.collectAsState()
     val density by vm.aodDensity.collectAsState()
+    val scale by vm.aodScale.collectAsState()
     val autoDim by vm.remoteAutoDim.collectAsState()
+    val hrStyle by vm.aodHrStyle.collectAsState()
+    val hrColor by vm.aodHrColor.collectAsState()
+    val logHeartRate by vm.aodLogHeartRate.collectAsState()
     val context = LocalContext.current
 
     var showAdvanced by remember { mutableStateOf(false) }
@@ -91,7 +98,7 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Always-on face") },
+                title = { Text("AOD") },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -101,7 +108,7 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                     IconButton(onClick = {
                         context.startActivity(RemoteModeActivity.intent(context))
                     }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Open the always-on face")
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Open the AOD")
                     }
                 }
             )
@@ -183,6 +190,70 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                 )
             }
 
+            item { Section("Heart rate") }
+
+            item {
+                Column(Modifier.padding(vertical = 8.dp, horizontal = 4.dp)) {
+                    Text("Live pulse", fontWeight = FontWeight.Medium)
+                    Text(
+                        "From your band, through LastDose. Shown only while the reading is fresh.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AodHrStyle.entries.forEach { option ->
+                            FilterChip(
+                                selected = hrStyle == option,
+                                onClick = { vm.setAodHrStyle(option) },
+                                label = { Text(option.label) }
+                            )
+                        }
+                    }
+                    if (hrStyle != AodHrStyle.OFF) {
+                        Spacer(Modifier.height(14.dp))
+                        Text("Colour", fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AodHrColor.entries.forEach { option ->
+                                FilterChip(
+                                    selected = hrColor == option,
+                                    onClick = { vm.setAodHrColor(option) },
+                                    label = { Text(option.label) },
+                                    leadingIcon = {
+                                        Box(
+                                            Modifier
+                                                .size(10.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (option == AodHrColor.ACCENT) MaterialTheme.colorScheme.primary
+                                                    else Color(option.argb)
+                                                )
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                        if (monochrome) {
+                            Text(
+                                "Pure white on black is on, so the pulse is drawn white.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                SettingSwitch(
+                    title = "Pulse on each log",
+                    subtitle = "Adds the heart rate recorded with a log, like \"Today · 21:42 · ♥ 106 BPM\".",
+                    checked = logHeartRate,
+                    onChange = { vm.setAodLogHeartRate(it) }
+                )
+            }
+
             item { Section("How it behaves") }
 
             item {
@@ -238,7 +309,7 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                 }
                 item {
                     Column(Modifier.padding(vertical = 8.dp, horizontal = 4.dp)) {
-                        Text("Size", fontWeight = FontWeight.Medium)
+                        Text("AOD size", fontWeight = FontWeight.Medium)
                         Text(
                             "How large the clock and the buttons are.",
                             style = MaterialTheme.typography.bodySmall,
@@ -254,6 +325,24 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                                 )
                             }
                         }
+                        Spacer(Modifier.height(12.dp))
+                        Text("Fine tune", fontWeight = FontWeight.Medium)
+                        Text(
+                            "Adjust the clock and controls between the presets.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = scale,
+                            onValueChange = vm::setAodScale,
+                            valueRange = 0.75f..1.35f,
+                            steps = 11
+                        )
+                        Text(
+                            "${(scale * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
                 item {

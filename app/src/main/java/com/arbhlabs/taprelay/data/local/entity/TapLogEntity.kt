@@ -17,5 +17,7 @@ data class TapLogEntity(
     val success: Boolean,
     val errorMessage: String? = null,
     val durationMs: Long,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    /** The wearer's live pulse when this ran (via LastDose), or null when there was no fresh reading. */
+    val heartRateBpm: Int? = null
 )

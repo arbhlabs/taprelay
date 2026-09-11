@@ -19,7 +19,7 @@ import com.arbhlabs.taprelay.data.local.entity.TapLogEntity
  * number the annotation uses. Bumping one without the other is exactly the mistake that ships an
  * app which cannot open an existing owner's tag database.
  */
-const val TAPRELAY_SCHEMA_VERSION = 11
+const val TAPRELAY_SCHEMA_VERSION = 12
 
 @Database(
     entities = [
@@ -159,6 +159,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE tags ADD COLUMN webhookBody TEXT")
                 db.execSQL("ALTER TABLE tags ADD COLUMN webhookSecretHeader TEXT")
                 db.execSQL("ALTER TABLE tags ADD COLUMN actionChainJson TEXT")
+            }
+        }
+
+        /** 0.6.5: the pulse at the moment an item ran, for the always-on face. Nullable, no backfill. */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tap_history ADD COLUMN heartRateBpm INTEGER")
             }
         }
 
