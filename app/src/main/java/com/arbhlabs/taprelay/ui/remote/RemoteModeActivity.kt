@@ -188,6 +188,17 @@ class RemoteModeActivity : ComponentActivity() {
                 var shift by remember { mutableStateOf(0) }
                 var armedId by remember { mutableStateOf<String?>(null) }
                 var runningId by remember { mutableStateOf<String?>(null) }
+                var heartRate by remember { mutableStateOf<Int?>(null) }
+
+                // Live pulse from the band, read from LastDose (which receives the TiltTrace stream).
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        heartRate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            services.lastDoseClient.liveHeartRate()
+                        }
+                        kotlinx.coroutines.delay(2_000L)
+                    }
+                }
 
                 val bright = !dimWhenIdle ||
                     quick.open ||
@@ -302,7 +313,8 @@ class RemoteModeActivity : ComponentActivity() {
                                 battery = controllers.firstOrNull()?.batteryPercent,
                                 connected = controllers.isNotEmpty(),
                                 accent = accent,
-                                automaticControls = automaticControls.description
+                                automaticControls = automaticControls.description,
+                                heartRate = heartRate
                             )
 
                             if (dozing) {

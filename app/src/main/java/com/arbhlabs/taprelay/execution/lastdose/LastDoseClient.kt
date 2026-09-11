@@ -141,6 +141,14 @@ class LastDoseClient(private val context: Context) {
         }
     }
 
+    /**
+     * The wearer's live heart rate as LastDose currently sees it (TiltTrace band stream), or null
+     * when there is no fresh reading, LastDose is too old to answer, or it is unreachable.
+     */
+    fun liveHeartRate(): Int? = call("live_hr", null)?.let { result ->
+        if (result.getBoolean("fresh", false)) result.getInt("bpm", 0).takeIf { it > 0 } else null
+    }
+
     fun isInstalled(): Boolean = runCatching {
         context.packageManager.getPackageInfo(PACKAGE, 0)
         true

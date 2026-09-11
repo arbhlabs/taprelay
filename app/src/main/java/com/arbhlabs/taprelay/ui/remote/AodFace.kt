@@ -95,9 +95,20 @@ fun AodStatusLine(
     connected: Boolean,
     accent: Color,
     automaticControls: String? = null,
+    heartRate: Int? = null,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
+    if (heartRate != null) {
+        // Live pulse from the band, via LastDose. Only drawn while a fresh reading exists.
+        Text(
+            "♥  $heartRate BPM",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFFF4858),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+        )
+    }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             "TAPRELAY",

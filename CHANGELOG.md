@@ -1,5 +1,11 @@
 # TapRelay Changelog
 
+## v0.6.4 - 2026-09-11 (Alpha / Internal Test)
+
+### Added
+- The always-on face shows your live heart rate ("♥ 93 BPM") from your band, read from LastDose
+  (needs LastDose 7.2.11+). It appears only while a fresh reading exists.
+
 ## v0.6.3 - 2026-09-11 (Alpha / Internal Test)
 
 ### Added
