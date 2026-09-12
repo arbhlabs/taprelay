@@ -36,6 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.arbhlabs.taprelay.controller.model.ControllerDevice
+import com.arbhlabs.taprelay.haptics.ControllerHapticLength
+import com.arbhlabs.taprelay.haptics.ControllerHapticStrength
+import com.arbhlabs.taprelay.haptics.ControllerHapticStyle
 import com.arbhlabs.taprelay.controller.model.ControllerInput
 import com.arbhlabs.taprelay.data.local.entity.ControllerMappingEntity
 import com.arbhlabs.taprelay.data.local.entity.TagEntity
@@ -392,6 +395,7 @@ fun ControllersScreen(
                             checked = rumble,
                             onCheckedChange = { vm.setControllerRumble(it) }
                         )
+                        if (rumble) ControllerHapticsPanel(vm)
                         PreferenceRow(
                             title = "Phone haptics",
                             hint = "Vibrate the phone on taps and actions.",
@@ -852,6 +856,65 @@ fun ControllersScreen(
                 TextButton(onClick = { editingMapping = null }) { Text("Done") }
             }
         )
+    }
+}
+
+/** Controller feel: strength, length, style, which events buzz, and a test on the pad in hand. */
+@Composable
+private fun ControllerHapticsPanel(vm: TapRelayViewModel) {
+    val s by vm.controllerHapticSettings.collectAsState()
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        HapticChoice("Strength", ControllerHapticStrength.values().toList(), s.strength, { it.label }) { v ->
+            vm.updateControllerHaptics(preview = true) { it.copy(strength = v) }
+        }
+        HapticChoice("Length", ControllerHapticLength.values().toList(), s.length, { it.label }) { v ->
+            vm.updateControllerHaptics(preview = true) { it.copy(length = v) }
+        }
+        HapticChoice("Feel", ControllerHapticStyle.values().toList(), s.style, { it.label }) { v ->
+            vm.updateControllerHaptics(preview = true) { it.copy(style = v) }
+        }
+        Text(
+            s.style.hint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { vm.previewControllerHaptic(success = true) }, modifier = Modifier.weight(1f)) {
+                Text("Test success")
+            }
+            OutlinedButton(onClick = { vm.previewControllerHaptic(success = false) }, modifier = Modifier.weight(1f)) {
+                Text("Test failure")
+            }
+        }
+    }
+    PreferenceRow(
+        title = "Buzz when an action works",
+        hint = "Turn off for silent success; failures can still buzz.",
+        checked = s.onSuccess,
+        onCheckedChange = { v -> vm.updateControllerHaptics { it.copy(onSuccess = v) } }
+    )
+    PreferenceRow(
+        title = "Buzz when an action fails",
+        hint = "Three firm knocks, whatever feel is chosen.",
+        checked = s.onFailure,
+        onCheckedChange = { v -> vm.updateControllerHaptics { it.copy(onFailure = v) } }
+    )
+    PreferenceRow(
+        title = "Light-adjust cues",
+        hint = "Knocks when the D-pad light window hits a limit or ends.",
+        checked = s.adjustmentCues,
+        onCheckedChange = { v -> vm.updateControllerHaptics { it.copy(adjustmentCues = v) } }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> HapticChoice(title: String, options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
+    Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { option ->
+            FilterChip(selected = option == selected, onClick = { onPick(option) }, label = { Text(label(option)) })
+        }
     }
 }
 

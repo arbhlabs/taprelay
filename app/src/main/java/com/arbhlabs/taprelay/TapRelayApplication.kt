@@ -48,6 +48,12 @@ class TapRelayApplication : Application() {
             }
         }
         scope.launch {
+            services.preferences.controllerHapticSettings.collectLatest {
+                services.hapticSignatures.controllerSettings = it
+                services.controllerManager.hapticSettings = it
+            }
+        }
+        scope.launch {
             services.preferences.automaticHapticSignatures.collectLatest {
                 services.hapticSignatures.automaticEnabled = it
             }

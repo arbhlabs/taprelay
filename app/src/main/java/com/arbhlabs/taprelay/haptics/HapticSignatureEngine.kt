@@ -14,7 +14,6 @@ import com.arbhlabs.taprelay.domain.model.PhoneAction
 import com.arbhlabs.taprelay.domain.model.TargetType
 import com.arbhlabs.taprelay.execution.TapOutcome
 import com.arbhlabs.taprelay.trigger.TriggerSource
-import kotlin.math.roundToInt
 
 data class HapticActivationContext(
     val source: TriggerSource,
@@ -47,7 +46,8 @@ class HapticSignatureEngine(
     @Volatile var automaticEnabled = true
     @Volatile var controllerEnabled = true
     @Volatile var phoneFallbackEnabled = true
-    @Volatile var intensity = HapticIntensity.NORMAL
+    /** Strength, length, style and which events buzz the pad (Controllers › Controller rumble). */
+    @Volatile var controllerSettings = ControllerHapticSettings()
 
     fun capabilities(inputDeviceId: Int): ControllerHapticCapabilities {
         val device = runCatching { inputManager.getInputDevice(inputDeviceId) }.getOrNull()
@@ -72,9 +72,19 @@ class HapticSignatureEngine(
     }
 
     fun play(tag: TagEntity, outcome: TapOutcome, context: HapticActivationContext) {
-        if (!automaticEnabled) return
+        val fromController = context.source == TriggerSource.CONTROLLER
+        if (fromController && !controllerSettings.plays(outcome.success)) return
+        // A fixed controller style, or Signatures switched off, still rumbles the pad (it used to
+        // go silent whenever Haptic Signatures was off).
+        val styled = fromController && controllerEnabled &&
+            (controllerSettings.style != ControllerHapticStyle.SIGNATURES || !automaticEnabled)
+        if (!automaticEnabled && !styled) return
         runCatching {
-            val external = if (context.source == TriggerSource.CONTROLLER && controllerEnabled) capabilities(context.inputDeviceId) else null
+            val external = if (fromController && controllerEnabled) capabilities(context.inputDeviceId) else null
+            if (styled) {
+                renderFixed(context.inputDeviceId, external, outcome.success)
+                return@runCatching
+            }
             val renderCaps = HapticRenderCapabilities(
                 channels = external?.usableChannels ?: 1,
                 amplitudeControl = external?.amplitudeControlById?.values?.any { it } ?: phoneVibrator.hasAmplitudeControl(),
@@ -91,6 +101,27 @@ class HapticSignatureEngine(
             if (external != null && external.usableChannels > 0) renderExternal(context.inputDeviceId, external, adapted)
             else if (phoneFallbackEnabled && phoneVibrator.hasVibrator()) render(phoneVibrator, adapted.channels.first(), phoneVibrator.hasAmplitudeControl())
         }
+    }
+
+    /** "Test" in settings: plays the current controller feel on the given pad (or the phone). */
+    fun preview(inputDeviceId: Int, success: Boolean) {
+        runCatching {
+            val external = if (inputDeviceId >= 0) capabilities(inputDeviceId) else null
+            renderFixed(inputDeviceId, external, success, signatureSample = CandidatePatterns.all.first().channels.first())
+        }
+    }
+
+    private fun renderFixed(
+        inputDeviceId: Int,
+        external: ControllerHapticCapabilities?,
+        success: Boolean,
+        signatureSample: HapticChannelPattern = ControllerHapticSettings.CLASSIC
+    ) {
+        val channel = if (!success) ControllerHapticSettings.FAILURE
+            else controllerSettings.successPattern() ?: signatureSample
+        val pattern = HapticPattern("fixed", HapticActionClass.OTHER, HapticEnvelope.CRISP, listOf(channel))
+        if (external != null && external.usableChannels > 0) renderExternal(inputDeviceId, external, pattern)
+        else if (phoneFallbackEnabled && phoneVibrator.hasVibrator()) render(phoneVibrator, channel, phoneVibrator.hasAmplitudeControl(), controller = false)
     }
 
     fun resetAssignments() = repository.reset()
@@ -127,7 +158,7 @@ class HapticSignatureEngine(
     }
 
     internal fun adapt(pattern: HapticPattern, descriptor: HapticSemanticDescriptor): HapticPattern {
-        if (descriptor.result == HapticResult.FAILURE) return HapticPattern("failure", pattern.family, HapticEnvelope.WARNING, listOf(HapticChannelPattern(HapticSide.CENTRE, listOf(0, 105, 75, 105, 75, 130), listOf(0, 255, 0, 255, 0, 255))))
+        if (descriptor.result == HapticResult.FAILURE) return HapticPattern("failure", pattern.family, HapticEnvelope.WARNING, listOf(ControllerHapticSettings.FAILURE))
         val channel = pattern.channels.first()
         val on = descriptor.transition == HapticTransition.ON
         val off = descriptor.transition == HapticTransition.OFF
@@ -148,23 +179,24 @@ class HapticSignatureEngine(
             val parallel = CombinedVibration.startParallel()
             caps.vibratorIds.forEachIndexed { index, id ->
                 val channel = pattern.channels.getOrElse(index) { pattern.channels.first() }
-                parallel.addVibrator(id, effect(channel, caps.amplitudeControlById[id] == true))
+                parallel.addVibrator(id, effect(channel, caps.amplitudeControlById[id] == true, controller = true))
             }
             manager.vibrate(parallel.combine())
         } else {
             @Suppress("DEPRECATION") val vibrator = device.vibrator
-            vibrator.cancel(); render(vibrator, pattern.channels.first(), vibrator.hasAmplitudeControl())
+            vibrator.cancel(); render(vibrator, pattern.channels.first(), vibrator.hasAmplitudeControl(), controller = true)
         }
     }
 
-    private fun render(vibrator: Vibrator, channel: HapticChannelPattern, amplitudeControl: Boolean) {
-        vibrator.cancel(); vibrator.vibrate(effect(channel, amplitudeControl))
+    private fun render(vibrator: Vibrator, channel: HapticChannelPattern, amplitudeControl: Boolean, controller: Boolean = false) {
+        vibrator.cancel(); vibrator.vibrate(effect(channel, amplitudeControl, controller))
     }
 
-    private fun effect(channel: HapticChannelPattern, amplitudeControl: Boolean): VibrationEffect {
-        val timings = channel.timingsMs.toLongArray()
+    /** Controller strength/length apply only to the pad; the phone keeps its own feel. */
+    private fun effect(channel: HapticChannelPattern, amplitudeControl: Boolean, controller: Boolean): VibrationEffect {
+        val (timings, amplitudes) = if (controller) controllerSettings.shape(channel.timingsMs, channel.amplitudes, amplitudeControl)
+            else channel.timingsMs.toLongArray() to channel.amplitudes.map { it.coerceIn(0, 255) }.toIntArray()
         if (!amplitudeControl) return VibrationEffect.createWaveform(timings, -1)
-        val amplitudes = channel.amplitudes.map { value -> (value * intensity.scale).roundToInt().coerceIn(0, 255) }.toIntArray()
         return VibrationEffect.createWaveform(timings, amplitudes, -1)
     }
 }

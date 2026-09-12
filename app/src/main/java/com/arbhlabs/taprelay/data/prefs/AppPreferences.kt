@@ -11,6 +11,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import com.arbhlabs.taprelay.controller.AdjustmentConfig
 import com.arbhlabs.taprelay.controller.AdjustmentStick
+import com.arbhlabs.taprelay.haptics.ControllerHapticLength
+import com.arbhlabs.taprelay.haptics.ControllerHapticSettings
+import com.arbhlabs.taprelay.haptics.ControllerHapticStrength
+import com.arbhlabs.taprelay.haptics.ControllerHapticStyle
 import kotlin.math.roundToInt
 
 private val Context.appPrefs by preferencesDataStore(name = "app_prefs")
@@ -234,6 +238,37 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAutomaticHapticSignatures(value: Boolean) {
         context.appPrefs.edit { it[automaticHapticSignaturesKey] = value }
+    }
+
+    private val hapticStrengthKey = stringPreferencesKey("controller_haptic_strength")
+    private val hapticLengthKey = stringPreferencesKey("controller_haptic_length")
+    private val hapticStyleKey = stringPreferencesKey("controller_haptic_style")
+    private val hapticOnSuccessKey = booleanPreferencesKey("controller_haptic_on_success")
+    private val hapticOnFailureKey = booleanPreferencesKey("controller_haptic_on_failure")
+    private val hapticAdjustCuesKey = booleanPreferencesKey("controller_haptic_adjust_cues")
+
+    val controllerHapticSettings: Flow<ControllerHapticSettings> =
+        context.appPrefs.data.map { p ->
+            val defaults = ControllerHapticSettings()
+            ControllerHapticSettings(
+                strength = runCatching { ControllerHapticStrength.valueOf(p[hapticStrengthKey]!!) }.getOrDefault(defaults.strength),
+                length = runCatching { ControllerHapticLength.valueOf(p[hapticLengthKey]!!) }.getOrDefault(defaults.length),
+                style = runCatching { ControllerHapticStyle.valueOf(p[hapticStyleKey]!!) }.getOrDefault(defaults.style),
+                onSuccess = p[hapticOnSuccessKey] ?: defaults.onSuccess,
+                onFailure = p[hapticOnFailureKey] ?: defaults.onFailure,
+                adjustmentCues = p[hapticAdjustCuesKey] ?: defaults.adjustmentCues
+            )
+        }
+
+    suspend fun setControllerHapticSettings(value: ControllerHapticSettings) {
+        context.appPrefs.edit {
+            it[hapticStrengthKey] = value.strength.name
+            it[hapticLengthKey] = value.length.name
+            it[hapticStyleKey] = value.style.name
+            it[hapticOnSuccessKey] = value.onSuccess
+            it[hapticOnFailureKey] = value.onFailure
+            it[hapticAdjustCuesKey] = value.adjustmentCues
+        }
     }
 
     suspend fun setRemoteAutoDim(value: Boolean) {

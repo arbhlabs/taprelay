@@ -110,6 +110,11 @@ class ControllerManager(
     @Volatile
     var rumbleEnabled: Boolean = true
 
+    /** Strength, length and whether the light-window cues buzz at all. */
+    @Volatile
+    var hapticSettings: com.arbhlabs.taprelay.haptics.ControllerHapticSettings =
+        com.arbhlabs.taprelay.haptics.ControllerHapticSettings()
+
     /** The pad that sent the press being handled, so the right controller buzzes. */
     private var lastInputDeviceId: Int = -1
 
@@ -355,8 +360,9 @@ class ControllerManager(
     private fun rumbleAdjustmentLimit() =
         vibratePad(longArrayOf(0, 35), intArrayOf(0, 140))
 
-    private fun vibratePad(timings: LongArray, amplitudes: IntArray) {
-        if (!rumbleEnabled) return
+    private fun vibratePad(rawTimings: LongArray, rawAmplitudes: IntArray) {
+        val settings = hapticSettings
+        if (!rumbleEnabled || !settings.adjustmentCues) return
         runCatching {
             val dev = inputManager.getInputDevice(lastInputDeviceId)
                 ?: _connectedControllers.value.firstOrNull()?.let { inputManager.getInputDevice(it.id) }
@@ -367,6 +373,7 @@ class ControllerManager(
                 @Suppress("DEPRECATION") dev.vibrator
             }
             if (!vibrator.hasVibrator()) return
+            val (timings, amplitudes) = settings.shape(rawTimings.toList(), rawAmplitudes.toList(), vibrator.hasAmplitudeControl())
             vibrator.vibrate(
                 if (vibrator.hasAmplitudeControl()) VibrationEffect.createWaveform(timings, amplitudes, -1)
                 else VibrationEffect.createWaveform(timings, -1)

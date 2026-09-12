@@ -1449,6 +1449,28 @@ class TapRelayViewModel(app: Application) : AndroidViewModel(app) {
         services.haptics.vibrateTick()
     }
 
+    val controllerHapticSettings: StateFlow<com.arbhlabs.taprelay.haptics.ControllerHapticSettings> =
+        services.preferences.controllerHapticSettings
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.arbhlabs.taprelay.haptics.ControllerHapticSettings())
+
+    /** Applies immediately (so a preview feels the new value), then persists. */
+    fun updateControllerHaptics(
+        preview: Boolean = false,
+        transform: (com.arbhlabs.taprelay.haptics.ControllerHapticSettings) -> com.arbhlabs.taprelay.haptics.ControllerHapticSettings
+    ) {
+        val next = transform(services.hapticSignatures.controllerSettings)
+        services.hapticSignatures.controllerSettings = next
+        services.controllerManager.hapticSettings = next
+        if (preview) previewControllerHaptic(success = true)
+        viewModelScope.launch { services.preferences.setControllerHapticSettings(next) }
+    }
+
+    /** Buzzes the first connected pad with the current feel; the phone if no pad is connected. */
+    fun previewControllerHaptic(success: Boolean) {
+        val pad = services.controllerManager.connectedControllers.value.firstOrNull()?.id ?: -1
+        services.hapticSignatures.preview(pad, success)
+    }
+
     fun setRemoteAutoDim(value: Boolean) = viewModelScope.launch {
         services.preferences.setRemoteAutoDim(value)
     }
