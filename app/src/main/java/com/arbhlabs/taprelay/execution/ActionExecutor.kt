@@ -183,7 +183,13 @@ class ActionExecutor(
      * @param debounce false for a deliberate on-screen press (the wrist remote): the scan debounce is
      *   for NFC re-reads, and the single-flight rule still stops a double run of the same item.
      */
-    suspend fun executeAndAwait(tagId: String, debounce: Boolean = true, onFeedback: (TapFeedback) -> Unit = {}): TapOutcome {
+    suspend fun executeAndAwait(
+        tagId: String,
+        debounce: Boolean = true,
+        /** false when the person is holding another device (the band buzzes itself), so the phone stays still. */
+        phoneHaptics: Boolean = true,
+        onFeedback: (TapFeedback) -> Unit = {}
+    ): TapOutcome {
         val now = System.currentTimeMillis()
         synchronized(lastFired) {
             val prev = lastFired[tagId]
@@ -192,7 +198,7 @@ class ActionExecutor(
             }
             lastFired[tagId] = now
         }
-        return run(tagId, onFeedback)
+        return run(tagId, onFeedback, phoneHaptics = phoneHaptics)
     }
 
     /**
@@ -206,7 +212,8 @@ class ActionExecutor(
         onFeedback: (TapFeedback) -> Unit,
         depth: Int = 0,
         silent: Boolean = false,
-        hapticContext: HapticActivationContext? = null
+        hapticContext: HapticActivationContext? = null,
+        phoneHaptics: Boolean = true
     ): TapOutcome {
         val startTime = System.currentTimeMillis()
         val rawTag = tags.getTagById(tagId)
@@ -240,7 +247,7 @@ class ActionExecutor(
         }
         if (!silent) {
             if (hapticContext != null) hapticSignatures?.play(rawTag, outcome, hapticContext)
-            else withContext(Dispatchers.Main) { if (outcome.success) haptics.vibrateSuccess() else haptics.vibrateError() }
+            else if (phoneHaptics) withContext(Dispatchers.Main) { if (outcome.success) haptics.vibrateSuccess() else haptics.vibrateError() }
         }
         if (depth == 0) _executions.tryEmit(outcome)
         return outcome

@@ -437,12 +437,12 @@ object BandBridge {
                     false to "Phone blocked opening"
                 }
             }
-            id.startsWith("item:") -> s.actionExecutor.executeAndAwait(id.removePrefix("item:"), debounce = false).let { it.success to it.summary }
+            id.startsWith("item:") -> s.actionExecutor.executeAndAwait(id.removePrefix("item:"), debounce = false, phoneHaptics = false).let { it.success to it.summary }
             id.startsWith("pc:") -> id.removePrefix("pc:").let { a -> BandDetail.pc(s, a, null, PcRelayAction.label(a)) }
             id == "hr" -> s.lastDoseClient.liveHeartRate().let { (it != null) to (it?.let { b -> "$b BPM" } ?: "No live HR") }
             id == "last" -> {
                 val log = s.tapLogDao.getRecentLogs(1).first().firstOrNull() ?: return false to "Nothing to repeat"
-                s.actionExecutor.executeAndAwait(log.tagId, debounce = false).let { it.success to it.summary }
+                s.actionExecutor.executeAndAwait(log.tagId, debounce = false, phoneHaptics = false).let { it.success to it.summary }
             }
             else -> {
                 val p = PREFS.firstOrNull { it.id == id } ?: return false to "Unknown control"

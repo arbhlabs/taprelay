@@ -229,7 +229,7 @@ internal object BandDetail {
             }
         }
         val tagId = controlId.removePrefix("item:")
-        if (op == "run") return s.actionExecutor.executeAndAwait(tagId, debounce = false).let { it.success to it.summary }
+        if (op == "run") return s.actionExecutor.executeAndAwait(tagId, debounce = false, phoneHaptics = false).let { it.success to it.summary }
         val tag = withContext(Dispatchers.IO) { s.tagRepository.getTagById(tagId) } ?: return false to TapError.TAG_UNREGISTERED.message
         val arg = op.substringAfter(':')
         val unknown = false to "Unknown control"
