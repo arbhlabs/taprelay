@@ -135,7 +135,8 @@ internal object BandDetail {
                 when {
                     tag == null -> b.group("Item", 2) { add("run", "Run", "play_arrow") }
                     tag.isPcRelay -> {
-                        b.group("This tile", 2) { add("run", tag.friendlyName, c.icon) }
+                        // A media tile is already in the Video group; only other PC actions get their own button.
+                        if (PC_MEDIA.none { it.action == tag.deviceId }) b.group("This tile", 2) { add("run", tag.friendlyName, c.icon) }
                         pcGroups(b)
                     }
                     tag.isPhone -> {

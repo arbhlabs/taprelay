@@ -220,6 +220,7 @@ private fun LookSection(chosen: List<BandBridge.Control>) {
     var labels by remember { mutableStateOf(BandBridge.lookFlag(look.LABELS)) }
     var awake by remember { mutableStateOf(BandBridge.lookFlag(look.AWAKE)) }
     var haptics by remember { mutableStateOf(BandBridge.lookFlag(look.HAPTICS)) }
+    var size by remember { mutableStateOf(BandBridge.look(look.SIZE, "large")) }
     val accentColor = Color(look.ACCENTS[accent] ?: 0xFF5BE7D6)
 
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
@@ -230,6 +231,10 @@ private fun LookSection(chosen: List<BandBridge.Control>) {
                 Text("Layout", style = MaterialTheme.typography.labelLarge)
                 ChipRow(listOf("grid" to "Grid", "compact" to "Compact", "list" to "List"), layout) {
                     layout = it; BandBridge.setLook(look.LAYOUT, it)
+                }
+                Text("Size", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                ChipRow(listOf("standard" to "S", "large" to "L", "xl" to "XL"), size) {
+                    size = it; BandBridge.setLook(look.SIZE, it)
                 }
                 Text("Heart rate", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                 ChipRow(listOf("large" to "Large", "small" to "Small", "hidden" to "Off"), hr) {

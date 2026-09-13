@@ -299,6 +299,8 @@ object BandBridge {
         const val LABELS = "look.labels"
         const val AWAKE = "look.awake"
         const val HAPTICS = "look.haptics"
+        const val SIZE = "look.size"
+        val SIZES = listOf("standard", "large", "xl")
         val LAYOUTS = listOf("grid", "compact", "list")
         val HR_SIZES = listOf("large", "small", "hidden")
         /** Same keys and colours as the band's accent classes (TapRelay_Band9 index.ux). */
@@ -321,6 +323,7 @@ object BandBridge {
         .put("labels", lookFlag(Look.LABELS))
         .put("awake", lookFlag(Look.AWAKE))
         .put("haptics", lookFlag(Look.HAPTICS))
+        .put("size", look(Look.SIZE, "large").takeIf { it in Look.SIZES } ?: "large")
 
     // ---- transport ----
 
