@@ -364,6 +364,13 @@ object BandBridge {
                 sendState(nodeId)
             }
             .addOnFailureListener {
+                // "you have registered": the SDK still holds our listener (e.g. after a reconnect), so the
+                // link is fine - keep the node and keep talking instead of going silent until a restart.
+                if (it.message?.contains("registered", ignoreCase = true) == true) {
+                    Log.i(TAG, "listener already registered")
+                    sendState(nodeId)
+                    return@addOnFailureListener
+                }
                 Log.w(TAG, "listener failed: $it")
                 synchronized(listening) { listening.remove(nodeId) }
                 retry()
