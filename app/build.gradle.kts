@@ -116,6 +116,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // Xiaomi wearable interconnect (Notify for Xiaomi build of xms-wearable-lib) for the Band 9 companion.
+    implementation(files("libs/xms-wearable-lib_1.4_release.aar"))
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     testImplementation("io.ktor:ktor-client-mock:$ktorVersion")

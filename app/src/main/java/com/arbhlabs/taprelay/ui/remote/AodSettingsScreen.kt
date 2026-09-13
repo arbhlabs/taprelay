@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -90,6 +91,12 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
     // A single hoisted state, so toggling a switch never scrolls the list back to the top.
     val listState = rememberLazyListState()
 
+    var showBand by remember { mutableStateOf(false) }
+    if (showBand) {
+        com.arbhlabs.taprelay.band.BandControlsScreen(onDone = { showBand = false })
+        return
+    }
+
     BackHandler { onDone() }
 
     val chosen = favourites.mapNotNull { id -> ui.tags.firstOrNull { it.tagId == id } }
@@ -105,6 +112,9 @@ fun AodSettingsScreen(vm: TapRelayViewModel, onDone: () -> Unit) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showBand = true }) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Watch, contentDescription = "Band 9 controls")
+                    }
                     IconButton(onClick = {
                         context.startActivity(RemoteModeActivity.intent(context))
                     }) {

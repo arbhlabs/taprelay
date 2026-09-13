@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Band 9 link (band/BandLinkService.kt): keeps the process reachable by the band with TapRelay closed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <!-- Places. Background location is what lets a geofence fire while TapRelay is closed;
          it is requested separately and only after the owner has added a place. -->
@@ -24,6 +27,13 @@
     <!-- Android 11+ package visibility: without this the LastDose provider is simply invisible. -->
     <queries>
         <package android:name="com.lastdose.app" />
+        <!-- Xiaomi Smart Band 9 link (band/BandBridge.kt): Notify for Xiaomi / Mi Fitness broker the interconnect. -->
+        <package android:name="com.mc.xiaomi1" />
+        <package android:name="com.mi.health" />
+        <package android:name="com.xiaomi.wearable" />
+        <intent>
+            <action android:name="com.xiaomi.wearable.XMS_WEARABLE_SERVICE" />
+        </intent>
     </queries>
 
     <application
@@ -88,6 +98,11 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@style/Theme.TapRelay" />
+
+        <service
+            android:name=".band.BandLinkService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <service
             android:name=".ui.remote.RemoteModeTileService"

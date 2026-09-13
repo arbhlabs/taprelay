@@ -20,6 +20,8 @@ class TapRelayApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         services = ServiceLocator(this)
+        runCatching { com.arbhlabs.taprelay.band.BandBridge.start(this) }
+        com.arbhlabs.taprelay.band.BandLinkService.startIfBandBroker(this)
 
         // Whether any TapRelay screen is in front - the light window only needs its own D-pad
         // pill when one is not, since TapRelay's screens already receive the D-pad.
