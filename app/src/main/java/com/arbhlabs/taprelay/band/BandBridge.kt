@@ -388,7 +388,7 @@ object BandBridge {
         val type = msg.optString("type")
         Log.i(TAG, "band -> $type")
         when (type) {
-            "hello" -> sendState(nodeId)
+            "hello" -> { lastStateText.remove(nodeId); sendState(nodeId) }
             "ping" -> send(nodeId, JSONObject().put("type", "pong").put("seq", seq))
             "cmd" -> command(nodeId, seq, msg.optString("id"))
             "detail" -> scope.launch { detailJson(msg.optString("id"))?.let { send(nodeId, it) } }
@@ -417,7 +417,7 @@ object BandBridge {
             }.getOrElse { false to "Failed" }
             Log.i(TAG, "cmd ${base.substringBefore(':')}${if (op != null) " detail" else ""} ok=$ok")
             send(nodeId, JSONObject().put("type", "result").put("seq", seq).put("ok", ok).put("text", text))
-            send(nodeId, stateJson())
+            sendStateNow(nodeId)
             if (op != null) detailJson(base)?.let { send(nodeId, it) }
         }
     }
@@ -454,7 +454,41 @@ object BandBridge {
     }
 
     private fun sendState(nodeId: String) {
-        scope.launch { send(nodeId, stateJson()) }
+        scope.launch { sendStateNow(nodeId) }
+    }
+
+    private val lastStateText = ConcurrentHashMap<String, String>()
+    private val lastHr = ConcurrentHashMap<String, Int>()
+    private val quietTicks = ConcurrentHashMap<String, Int>()
+
+    /**
+     * Keeps the Bluetooth link free for taps: the full ~3 KB state only goes out when something on it
+     * changed (or every 6th tick as a safety net); a new pulse alone is a tiny {type:hr}; otherwise a
+     * {type:pong} keeps the link warm. Band 1.7.2+ answers a pong with hello when it has no tiles yet.
+     */
+    private suspend fun sendStateNow(nodeId: String) {
+        val json = stateJson()
+        val hr = json.optInt("hr", 0)
+        json.remove("hr")
+        val text = json.toString()
+        val ticks = (quietTicks[nodeId] ?: 0) + 1
+        when {
+            lastStateText[nodeId] != text || ticks >= 6 -> {
+                lastStateText[nodeId] = text
+                lastHr[nodeId] = hr
+                quietTicks[nodeId] = 0
+                send(nodeId, json.put("hr", hr))
+            }
+            lastHr[nodeId] != hr -> {
+                lastHr[nodeId] = hr
+                quietTicks[nodeId] = ticks
+                send(nodeId, JSONObject().put("type", "hr").put("hr", hr))
+            }
+            else -> {
+                quietTicks[nodeId] = ticks
+                send(nodeId, JSONObject().put("type", "pong"))
+            }
+        }
     }
 
     private suspend fun stateJson(): JSONObject {
