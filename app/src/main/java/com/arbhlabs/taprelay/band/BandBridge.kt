@@ -59,6 +59,20 @@ object BandBridge {
         "lamp" to "light", "room" to "room", "plug" to "plug", "switch" to "bolt", "scene" to "scene", "air" to "air", "lastdose" to "pill"
     )
 
+    private val MEDIA_WORDS = Regex("\\b(play|pause|next|previous|skip|media|stop)")
+
+    /** A tile icon that says what a media/phone/PC action does (its action code or name), so they don't all look alike. */
+    private fun actionIcon(text: String): String? {
+        val s = text.lowercase()
+        return when {
+            "volume" in s || "mute" in s -> "volume"
+            MEDIA_WORDS.containsMatchIn(s) -> "media"
+            "flashlight" in s || "torch" in s -> "light"
+            "dnd" in s || "disturb" in s -> "moon"
+            else -> null
+        }
+    }
+
     fun iconOverride(id: String): String? = prefs().getString("icon:$id", null)?.takeIf { it in ICON_KEYS }
 
     fun setIcon(id: String, key: String) {
@@ -220,11 +234,11 @@ object BandBridge {
         runCatching { s.tagRepository.getTagsOnce() }.getOrDefault(emptyList()).filter { it.enabled }.forEach { t ->
             val power = t.targetType.name == "DEVICE" && t.actionType.name in setOf("TURN_ON", "TURN_OFF", "TOGGLE")
             val icon = when (t.targetType.name) {
-                "PC_RELAY" -> "pc"
                 "LASTDOSE_LOG" -> "pill"
                 "SCENE" -> "scene"
                 "DEVICE" -> ITEM_ICON[t.iconKey] ?: "bolt"
-                else -> ITEM_ICON[t.iconKey] ?: "phone"
+                "PC_RELAY" -> actionIcon("${t.deviceId} ${t.friendlyName}") ?: "pc"
+                else -> actionIcon("${t.deviceId} ${t.friendlyName}") ?: ITEM_ICON[t.iconKey] ?: "phone"
             }
             out += Control("item:${t.tagId}", t.friendlyName, toggle = power, on = if (power) t.lastKnownState == 1 else null, icon = icon)
         }
