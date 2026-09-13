@@ -176,6 +176,8 @@ object BandBridge {
 
     fun start(application: TapRelayApplication) {
         app = application
+        // 0.6.7: icons chosen in the old 28-icon picker would hide the new automatic picks; start from the automatic set once.
+        prefs().let { p -> if (!p.getBoolean("migrated.icons259", false)) p.edit().apply { p.all.keys.filter { it.startsWith("icon:") }.forEach { remove(it) } }.putBoolean("migrated.icons259", true).apply() }
         sdk = SdkContext(application)
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
