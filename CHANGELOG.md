@@ -1,5 +1,17 @@
 # TapRelay Changelog
 
+## v0.6.7 - 2026-09-13 (Alpha / Internal Test)
+
+### Added
+- Xiaomi Smart Band 9 wrist remote (needs Notify for Xiaomi and the TapRelay band app 1.4.1): a
+  2-column tile grid of your chosen items, Remote Mode and settings, with live heart rate on the band.
+  Choose tiles, order and icons in AOD settings → watch icon. A quiet "Band link" notification keeps
+  the band working while TapRelay is closed.
+
+### Fixed
+- TapRelay no longer crashes on launch while Notify for Xiaomi is restarting; the band link
+  reconnects by itself once Notify is back.
+
 ## v0.6.5 - 2026-09-11 (Alpha / Internal Test)
 
 ### Added
