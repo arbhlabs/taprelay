@@ -61,8 +61,9 @@ class PcRelayClient(
             }
             try {
                 val path = "/v1/action"
+                val (wireAction, wireValue) = PcRelayAction.wire(action, value)
                 val body = PcRelayProtocol.encodeAction(
-                    PcRelayProtocol.ActionRequest(protocol, eventId, ownerId, action, value)
+                    PcRelayProtocol.ActionRequest(protocol, eventId, ownerId, wireAction, wireValue)
                 )
                 var response = http.post("${baseUrl.trimEnd('/')}$path") {
                     contentType(ContentType.Application.Json)

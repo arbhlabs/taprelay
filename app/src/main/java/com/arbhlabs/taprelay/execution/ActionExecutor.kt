@@ -110,7 +110,8 @@ class ActionExecutor(
 
     private fun isNudge(tag: TagEntity): Boolean = when {
         tag.isPcRelay -> tag.deviceId in setOf(
-            PcRelayAction.MEDIA_VOLUME_UP, PcRelayAction.MEDIA_VOLUME_DOWN, PcRelayAction.MEDIA_NEXT, PcRelayAction.MEDIA_PREVIOUS
+            PcRelayAction.MEDIA_VOLUME_UP, PcRelayAction.MEDIA_VOLUME_DOWN, PcRelayAction.MEDIA_NEXT, PcRelayAction.MEDIA_PREVIOUS,
+            PcRelayAction.MEDIA_SEEK_FORWARD, PcRelayAction.MEDIA_SEEK_BACK
         )
         tag.isPhone -> tag.deviceId in setOf(
             com.arbhlabs.taprelay.domain.model.PhoneAction.VOLUME_UP, com.arbhlabs.taprelay.domain.model.PhoneAction.VOLUME_DOWN,

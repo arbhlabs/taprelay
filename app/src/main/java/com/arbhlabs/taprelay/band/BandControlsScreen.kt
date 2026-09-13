@@ -1,5 +1,6 @@
 package com.arbhlabs.taprelay.band
 
+import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,70 +29,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeDown
-import androidx.compose.material.icons.automirrored.filled.VolumeMute
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bed
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Blinds
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Coffee
-import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.Desk
-import androidx.compose.material.icons.filled.DoorFront
-import androidx.compose.material.icons.filled.EmojiObjects
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Fluorescent
-import androidx.compose.material.icons.filled.Garage
-import androidx.compose.material.icons.filled.Highlight
-import androidx.compose.material.icons.filled.Hvac
-import androidx.compose.material.icons.filled.Kitchen
-import androidx.compose.material.icons.filled.Light
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.LocalFlorist
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.ModeFanOff
-import androidx.compose.material.icons.filled.Monitor
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Nightlight
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Outlet
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Power
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.SettingsRemote
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Thermostat
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Tungsten
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.WbIncandescent
-import androidx.compose.material.icons.filled.WbIridescent
-import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -102,51 +53,47 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-/** Phone-side previews of the band's bundled tile icons (same keys as [BandBridge.ICON_KEYS]). */
-private val BAND_ICONS: Map<String, ImageVector> = mapOf(
-    "bolt" to Icons.Default.Bolt, "light" to Icons.Default.Lightbulb, "lamp" to Icons.Default.EmojiObjects,
-    "room" to Icons.Default.Weekend, "plug" to Icons.Default.Power, "scene" to Icons.Default.AutoAwesome,
-    "air" to Icons.Default.Air, "fan" to Icons.Default.ModeFanOff, "heat" to Icons.Default.Thermostat,
-    "tv" to Icons.Default.Tv, "pc" to Icons.Default.Computer, "media" to Icons.Default.PlayArrow,
-    "music" to Icons.Default.MusicNote, "volume" to Icons.AutoMirrored.Filled.VolumeUp, "moon" to Icons.Default.Bedtime,
-    "sun" to Icons.Default.LightMode, "door" to Icons.Default.DoorFront, "lock" to Icons.Default.Lock,
-    "remote" to Icons.Default.SettingsRemote, "heart" to Icons.Default.Favorite, "repeat" to Icons.Default.Replay,
-    "aod" to Icons.Default.Visibility, "haptic" to Icons.Default.Vibration, "game" to Icons.Default.SportsEsports,
-    "pill" to Icons.Default.Medication, "phone" to Icons.Default.Smartphone, "bell" to Icons.Default.Notifications,
-    "tune" to Icons.Default.Tune,
-    "ceiling" to Icons.Default.Light, "tube" to Icons.Default.Fluorescent, "spot" to Icons.Default.Highlight,
-    "glow" to Icons.Default.WbIridescent, "tungsten" to Icons.Default.Tungsten, "night" to Icons.Default.Nightlight,
-    "bulb" to Icons.Default.WbIncandescent, "vent" to Icons.Default.Hvac, "desk" to Icons.Default.Desk,
-    "blinds" to Icons.Default.Blinds, "ac" to Icons.Default.AcUnit, "humid" to Icons.Default.WaterDrop,
-    "speaker" to Icons.Default.Speaker, "monitor" to Icons.Default.Monitor, "coffee" to Icons.Default.Coffee,
-    "outlet" to Icons.Default.Outlet, "power" to Icons.Default.PowerSettingsNew, "garage" to Icons.Default.Garage,
-    "plant" to Icons.Default.LocalFlorist, "voldown" to Icons.AutoMirrored.Filled.VolumeDown,
-    "mute" to Icons.AutoMirrored.Filled.VolumeMute, "next" to Icons.Default.SkipNext, "prev" to Icons.Default.SkipPrevious,
-    "bed" to Icons.Default.Bed, "kitchen" to Icons.Default.Kitchen
-)
-
-private fun bandIcon(key: String) = BAND_ICONS[key] ?: Icons.Default.Bolt
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 private val TILE_OFF = Color(0xFF2A3139)
 private val INK_ON = Color(0xFF0B1512)
 private val INK_OFF = Color(0xFFE6EDF2)
+
+private val iconCache = ConcurrentHashMap<String, ImageBitmap>()
+
+/** The same PNG the band draws (assets/band_icons, generated with the band app), tinted. */
+@Composable
+private fun BandIcon(key: String, modifier: Modifier = Modifier.size(24.dp), tint: Color = LocalContentColor.current, description: String? = null) {
+    val context = LocalContext.current
+    val bitmap = remember(key) {
+        iconCache[key] ?: runCatching {
+            context.assets.open("band_icons/$key.png").use { BitmapFactory.decodeStream(it).asImageBitmap() }
+        }.getOrNull()?.also { iconCache[key] = it }
+    }
+    if (bitmap != null) Icon(bitmap = bitmap, contentDescription = description, tint = tint, modifier = modifier)
+    else Box(modifier)
+}
 
 /** Chooses which TapRelay controls the Xiaomi band shows, their order, each tile's icon, and how the band looks. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BandControlsScreen(onDone: () -> Unit) {
     BackHandler { onDone() }
+    val scope = rememberCoroutineScope()
     var raw by remember { mutableStateOf<List<BandBridge.Control>>(emptyList()) }
     var order by remember { mutableStateOf<List<String>>(emptyList()) }
     var picking by remember { mutableStateOf<BandBridge.Control?>(null) }
@@ -167,26 +114,46 @@ fun BandControlsScreen(onDone: () -> Unit) {
     }
 
     picking?.let { control ->
+        var query by remember(control.id) { mutableStateOf("") }
+        val keys = remember(query) {
+            val q = query.trim().lowercase().replace(' ', '_')
+            BandBridge.ICON_KEYS.filter { q.isEmpty() || it.contains(q) || BandIcons.category(it)?.startsWith(q) == true }
+        }
         AlertDialog(
             onDismissRequest = { picking = null },
             title = { Text("Icon for ${control.label}") },
             text = {
-                LazyVerticalGrid(columns = GridCells.Fixed(5), modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                    items(BandBridge.ICON_KEYS) { key ->
-                        IconButton(onClick = {
-                            BandBridge.setIcon(control.id, key)
-                            raw = raw.map { if (it.id == control.id) it.copy(icon = key) else it }
-                            picking = null
-                        }) {
-                            Icon(
-                                bandIcon(key), contentDescription = key,
-                                tint = if (key == control.icon) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
+                Column {
+                    OutlinedTextField(
+                        value = query, onValueChange = { query = it }, singleLine = true,
+                        placeholder = { Text("Search ${BandBridge.ICON_KEYS.size} icons, e.g. lamp, volume") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LazyVerticalGrid(columns = GridCells.Fixed(6), modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp)) {
+                        items(keys) { key ->
+                            IconButton(onClick = {
+                                BandBridge.setIcon(control.id, key)
+                                raw = raw.map { if (it.id == control.id) it.copy(icon = key) else it }
+                                picking = null
+                            }) {
+                                BandIcon(
+                                    key, description = key.replace('_', ' '),
+                                    tint = if (key == control.icon) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { picking = null }) { Text("Close") } }
+            confirmButton = { TextButton(onClick = { picking = null }) { Text("Close") } },
+            dismissButton = {
+                TextButton(onClick = {
+                    BandBridge.clearIcon(control.id)
+                    picking = null
+                    scope.launch { raw = BandBridge.catalogue() }
+                }) { Text("Automatic") }
+            }
         )
     }
 
@@ -209,7 +176,8 @@ fun BandControlsScreen(onDone: () -> Unit) {
             item {
                 Text("Tiles", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
                 Text(
-                    "In this order on the band. Icons are picked from each name; tap one to choose your own.",
+                    "In this order on the band. Icons are picked from each name; tap one to choose your own. " +
+                        "On the band, hold a tile for its own controls.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -218,7 +186,7 @@ fun BandControlsScreen(onDone: () -> Unit) {
             itemsIndexed(chosen, key = { _, c -> "on-${c.id}" }) { i, c ->
                 ListItem(
                     leadingContent = {
-                        IconButton(onClick = { picking = c }) { Icon(bandIcon(c.icon), contentDescription = "Change icon") }
+                        IconButton(onClick = { picking = c }) { BandIcon(c.icon, description = "Change icon") }
                     },
                     headlineContent = { Text(c.label) },
                     trailingContent = {
@@ -233,7 +201,7 @@ fun BandControlsScreen(onDone: () -> Unit) {
             item { Text("Add", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)) }
             items(all.filter { it.id !in order }, key = { "off-${it.id}" }) { c ->
                 ListItem(
-                    leadingContent = { Icon(bandIcon(c.icon), contentDescription = null) },
+                    leadingContent = { BandIcon(c.icon) },
                     headlineContent = { Text(c.label) },
                     trailingContent = { IconButton(onClick = { save(order + c.id) }) { Icon(Icons.Default.Add, "Add") } }
                 )
@@ -306,16 +274,17 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     }
 }
 
-/** A miniature Band 9: the same header, layout, colours and icons as the wrist, first few tiles only. */
+/** A miniature Band 9: the same clock, header, layout, colours and icons as the wrist, first few tiles only. */
 @Composable
 private fun BandPreview(controls: List<BandBridge.Control>, layout: String, accent: Color, hr: String, labels: Boolean) {
     Column(
-        Modifier.width(100.dp).height(230.dp).clip(RoundedCornerShape(44.dp)).background(Color.Black)
-            .padding(horizontal = 9.dp, vertical = 18.dp),
+        Modifier.width(100.dp).height(240.dp).clip(RoundedCornerShape(44.dp)).background(Color.Black)
+            .padding(horizontal = 9.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(24.dp)) {
+        Text("21:42", color = INK_OFF, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(22.dp)) {
             Box(Modifier.size(4.dp).clip(CircleShape).background(accent))
             Spacer(Modifier.width(4.dp))
             if (hr != "hidden") {
@@ -334,7 +303,7 @@ private fun BandPreview(controls: List<BandBridge.Control>, layout: String, acce
                         .padding(horizontal = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(bandIcon(c.icon), null, tint = if (on(c)) INK_ON else INK_OFF, modifier = Modifier.size(12.dp))
+                    BandIcon(c.icon, tint = if (on(c)) INK_ON else INK_OFF, modifier = Modifier.size(12.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(c.label, fontSize = 8.sp, color = if (on(c)) INK_ON else INK_OFF, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -351,8 +320,8 @@ private fun BandPreview(controls: List<BandBridge.Control>, layout: String, acce
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 val showLabel = cols == 2 && labels
-                                Icon(
-                                    bandIcon(c.icon), null, tint = if (on(c)) INK_ON else INK_OFF,
+                                BandIcon(
+                                    c.icon, tint = if (on(c)) INK_ON else INK_OFF,
                                     modifier = Modifier.size(if (cols == 3) 13.dp else if (showLabel) 15.dp else 20.dp)
                                 )
                                 if (showLabel) {

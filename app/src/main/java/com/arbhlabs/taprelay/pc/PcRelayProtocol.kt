@@ -69,6 +69,12 @@ object PcRelayAction {
     const val MEDIA_VOLUME_DOWN = "media.volume_down"
     const val MEDIA_MUTE = "media.mute"
     const val MEDIA_STOP = "media.stop"
+    /**
+     * Seek the video in front by 5 s. Sent to the PC as the Right / Left arrow key, which YouTube, Media
+     * Player, mpv and MPC all use, so every paired helper can already do it.
+     */
+    const val MEDIA_SEEK_FORWARD = "media.seek_forward"
+    const val MEDIA_SEEK_BACK = "media.seek_back"
     /** Value: a shortcut such as "ctrl+shift+m", "alt+tab", "f11", "win+d" or "space". */
     const val KEYS_SEND = "keys.send"
     /** Value: a URL, a program path or a file/folder, opened the way double-clicking would. */
@@ -88,6 +94,8 @@ object PcRelayAction {
         Spec(MEDIA_VOLUME_UP, "Volume up"),
         Spec(MEDIA_VOLUME_DOWN, "Volume down"),
         Spec(MEDIA_MUTE, "Mute"),
+        Spec(MEDIA_SEEK_BACK, "Back 5 seconds"),
+        Spec(MEDIA_SEEK_FORWARD, "Forward 5 seconds"),
         Spec(KEYS_SEND, "Keyboard shortcut", "Shortcut", "e.g. ctrl+shift+m, alt+tab, f11, win+d"),
         Spec(OPEN_TARGET, "Open a link, app or file", "What to open", "e.g. https://youtube.com or C:\\Games\\game.exe"),
         Spec(SYSTEM_LOCK, "Lock the PC"),
@@ -100,4 +108,11 @@ object PcRelayAction {
     fun spec(id: String): Spec? = specs.firstOrNull { it.id == id }
 
     fun label(id: String): String = spec(id)?.label ?: id
+
+    /** What actually goes over the wire: phone-side actions expressed as ones every helper understands. */
+    fun wire(action: String, value: String?): Pair<String, String?> = when (action) {
+        MEDIA_SEEK_FORWARD -> KEYS_SEND to "right"
+        MEDIA_SEEK_BACK -> KEYS_SEND to "left"
+        else -> action to value
+    }
 }
