@@ -52,25 +52,92 @@ object BandBridge {
     /** Tile icons bundled in the band app (TapRelay_Band9/tools/make-icons.mjs). Keep in sync. */
     val ICON_KEYS = listOf(
         "bolt", "light", "lamp", "room", "plug", "scene", "air", "fan", "heat", "tv", "pc", "media", "music", "volume",
-        "moon", "sun", "door", "lock", "remote", "heart", "repeat", "aod", "haptic", "game", "pill", "phone", "bell", "tune"
+        "moon", "sun", "door", "lock", "remote", "heart", "repeat", "aod", "haptic", "game", "pill", "phone", "bell", "tune",
+        "ceiling", "tube", "spot", "glow", "tungsten", "night", "bulb", "vent", "desk", "blinds", "ac", "humid", "speaker",
+        "monitor", "coffee", "outlet", "power", "garage", "plant", "voldown", "mute", "next", "prev", "bed", "kitchen"
     )
 
     private val ITEM_ICON = mapOf(
         "lamp" to "light", "room" to "room", "plug" to "plug", "switch" to "bolt", "scene" to "scene", "air" to "air", "lastdose" to "pill"
     )
 
-    private val MEDIA_WORDS = Regex("\\b(play|pause|next|previous|skip|media|stop)")
+    private val NEXT_WORDS = Regex("\\b(next|skip)")
+    private val PREV_WORDS = Regex("\\b(previous|prev)\\b")
+    private val MEDIA_WORDS = Regex("\\b(play|pause|media|stop)")
 
     /** A tile icon that says what a media/phone/PC action does (its action code or name), so they don't all look alike. */
     private fun actionIcon(text: String): String? {
         val s = text.lowercase()
         return when {
-            "volume" in s || "mute" in s -> "volume"
+            "volume_down" in s || "volume down" in s || "leiser" in s -> "voldown"
+            "mute" in s -> "mute"
+            "volume" in s || "lauter" in s -> "volume"
+            NEXT_WORDS.containsMatchIn(s) -> "next"
+            PREV_WORDS.containsMatchIn(s) -> "prev"
             MEDIA_WORDS.containsMatchIn(s) -> "media"
-            "flashlight" in s || "torch" in s -> "light"
+            "flashlight" in s || "torch" in s -> "spot"
             "dnd" in s || "disturb" in s -> "moon"
             else -> null
         }
+    }
+
+    /**
+     * Name keyword -> icon, most specific first (English and German), so "Vent lamp" and "Corner lamp"
+     * don't both end up as the same bulb on a 190 px screen.
+     */
+    private val NAME_ICONS: List<Pair<Regex, String>> = listOf(
+        "vent|hood|extractor|dunstabzug|abzug" to "vent",
+        "ceiling|decke|pendant|chandelier|main light|hauptlicht" to "ceiling",
+        "strip|\\bled\\b|backlight|ambilight" to "tube",
+        "\\bspot|downlight" to "spot",
+        "night|nacht|bedside|nightstand" to "night",
+        "desk|schreibtisch|\\btable|\\btisch" to "desk",
+        "corner|ecke|floor|stehlampe|standing" to "lamp",
+        "\\bbed|\\bbett|schlafzimmer" to "bed",
+        "kitchen|küche|kueche" to "kitchen",
+        "blind|curtain|shade|rollo|jalousie|vorhang" to "blinds",
+        "garage" to "garage",
+        "air ?con|\\bac\\b|klima|cooling" to "ac",
+        "purifier|luftreiniger|\\bair\\b" to "air",
+        "humidif|befeucht" to "humid",
+        "heater|heizung|\\bheat|radiator" to "heat",
+        "\\bfan\\b|ventilator|lüfter" to "fan",
+        "coffee|kaffee|espresso" to "coffee",
+        "plant|pflanze|\\bgrow" to "plant",
+        "speaker|sonos|lautsprecher" to "speaker",
+        "\\btv\\b|television|fernseher" to "tv",
+        "monitor|screen|bildschirm|display" to "monitor",
+        "\\bpc\\b|computer|laptop|rechner" to "pc",
+        "xbox|playstation|ps5|console|konsole" to "game",
+        "socket|outlet|steckdose" to "outlet",
+        "\\bplug|stecker" to "plug",
+        "door|\\btür|\\btuer" to "door",
+        "\\block|schloss" to "lock",
+        "lamp|light|licht|bulb|birne" to "light"
+    ).map { (words, icon) -> Regex(words, RegexOption.IGNORE_CASE) to icon }
+
+    private fun nameIcon(name: String): String? = NAME_ICONS.firstOrNull { it.first.containsMatchIn(name) }?.second
+
+    /** When two tiles would still share an icon, the later one takes the next free icon of the same kind. */
+    private val ICON_FAMILIES = listOf(
+        listOf("light", "lamp", "ceiling", "bulb", "tube", "spot", "glow", "tungsten", "night", "sun"),
+        listOf("plug", "outlet", "power", "bolt"),
+        listOf("fan", "vent", "air", "ac", "humid"),
+        listOf("pc", "monitor", "tv", "game")
+    )
+
+    /** [all] with automatic icons made distinct in band order ([ids]). Chosen icons and settings tiles are left alone. */
+    fun withDistinctIcons(all: List<Control>, ids: List<String>): List<Control> {
+        val used = HashSet<String>()
+        val changed = HashMap<String, String>()
+        ids.mapNotNull { id -> all.firstOrNull { it.id == id } }.forEach { c ->
+            var icon = c.icon
+            if (icon in used && !c.id.startsWith("pref:") && iconOverride(c.id) == null) {
+                ICON_FAMILIES.firstOrNull { icon in it }?.firstOrNull { it !in used }?.let { icon = it; changed[c.id] = it }
+            }
+            used += icon
+        }
+        return all.map { c -> changed[c.id]?.let { c.copy(icon = it) } ?: c }
     }
 
     fun iconOverride(id: String): String? = prefs().getString("icon:$id", null)?.takeIf { it in ICON_KEYS }
@@ -105,6 +172,7 @@ object BandBridge {
     private var permissionAsked = false
 
     @Volatile private var remoteActivity: WeakReference<Activity>? = null
+    @Volatile private var bandIds: Set<String> = emptySet()
 
     /**
      * The context every xms-wearable-lib call gets. The library binds Notify's service through
@@ -233,12 +301,15 @@ object BandBridge {
         out += Control("remote", "Remote Mode", toggle = true, on = remoteActivity?.get() != null, icon = "remote")
         runCatching { s.tagRepository.getTagsOnce() }.getOrDefault(emptyList()).filter { it.enabled }.forEach { t ->
             val power = t.targetType.name == "DEVICE" && t.actionType.name in setOf("TURN_ON", "TURN_OFF", "TOGGLE")
+            val named = nameIcon(t.friendlyName)
             val icon = when (t.targetType.name) {
                 "LASTDOSE_LOG" -> "pill"
-                "SCENE" -> "scene"
-                "DEVICE" -> ITEM_ICON[t.iconKey] ?: "bolt"
-                "PC_RELAY" -> actionIcon("${t.deviceId} ${t.friendlyName}") ?: "pc"
-                else -> actionIcon("${t.deviceId} ${t.friendlyName}") ?: ITEM_ICON[t.iconKey] ?: "phone"
+                "SCENE" -> named ?: "scene"
+                // Lights and switches are told apart by name; a purifier or plug keeps its kind's icon.
+                "DEVICE" -> if (t.iconKey in setOf("lamp", "room", "switch", "")) named ?: ITEM_ICON[t.iconKey] ?: "bolt"
+                    else ITEM_ICON[t.iconKey] ?: named ?: "bolt"
+                "PC_RELAY" -> actionIcon("${t.deviceId} ${t.friendlyName}") ?: named ?: "pc"
+                else -> actionIcon("${t.deviceId} ${t.friendlyName}") ?: named ?: ITEM_ICON[t.iconKey] ?: "phone"
             }
             out += Control("item:${t.tagId}", t.friendlyName, toggle = power, on = if (power) t.lastKnownState == 1 else null, icon = icon)
         }
@@ -269,6 +340,38 @@ object BandBridge {
         prefs().edit().putString("order", ids.joinToString("\n")).apply()
         pushState()
     }
+
+    // ---- band look: sent inside every state; band 1.5+ applies it, older band apps ignore it ----
+
+    object Look {
+        const val LAYOUT = "look.layout"
+        const val ACCENT = "look.accent"
+        const val HR = "look.hr"
+        const val LABELS = "look.labels"
+        const val AWAKE = "look.awake"
+        const val HAPTICS = "look.haptics"
+        val LAYOUTS = listOf("grid", "compact", "list")
+        val HR_SIZES = listOf("large", "small", "hidden")
+        /** Same keys and colours as the band's accent classes (TapRelay_Band9 index.ux). */
+        val ACCENTS = linkedMapOf(
+            "teal" to 0xFF5BE7D6, "blue" to 0xFF5AA9FF, "purple" to 0xFFB18CFF, "pink" to 0xFFFF7AC6,
+            "red" to 0xFFFF5A5F, "orange" to 0xFFFFA24C, "green" to 0xFF7BE36B, "white" to 0xFFF2F5F7
+        )
+    }
+
+    fun look(key: String, default: String): String = prefs().getString(key, null) ?: default
+    fun lookFlag(key: String): Boolean = prefs().getBoolean(key, true)
+
+    fun setLook(key: String, value: String) { prefs().edit().putString(key, value).apply(); pushState() }
+    fun setLookFlag(key: String, value: Boolean) { prefs().edit().putBoolean(key, value).apply(); pushState() }
+
+    private fun lookJson() = JSONObject()
+        .put("layout", look(Look.LAYOUT, "grid").takeIf { it in Look.LAYOUTS } ?: "grid")
+        .put("accent", look(Look.ACCENT, "teal").takeIf { it in Look.ACCENTS } ?: "teal")
+        .put("hr", look(Look.HR, "large").takeIf { it in Look.HR_SIZES } ?: "large")
+        .put("labels", lookFlag(Look.LABELS))
+        .put("awake", lookFlag(Look.AWAKE))
+        .put("haptics", lookFlag(Look.HAPTICS))
 
     // ---- transport ----
 
@@ -336,8 +439,10 @@ object BandBridge {
     private fun command(nodeId: String, seq: Int, id: String) {
         send(nodeId, JSONObject().put("type", "ack").put("seq", seq))
         scope.launch {
-            val all = catalogue()
-            val (ok, text) = if (id in order(all)) {
+            // Authorise against the list last sent to the band (refreshed every 8 s) so a tap runs at
+            // once; only an id that is not on it pays for a fresh catalogue.
+            val allowed = id in bandIds || catalogue().let { all -> id in order(all) }
+            val (ok, text) = if (allowed) {
                 runCatching { execute(id) }.getOrElse { false to "Failed" }
             } else false to "Not on the band list"
             Log.i(TAG, "cmd ${id.substringBefore(':')} ok=$ok")
@@ -361,11 +466,11 @@ object BandBridge {
                     false to "Phone blocked opening"
                 }
             }
-            id.startsWith("item:") -> s.actionExecutor.executeAndAwait(id.removePrefix("item:")).let { it.success to it.summary }
+            id.startsWith("item:") -> s.actionExecutor.executeAndAwait(id.removePrefix("item:"), debounce = false).let { it.success to it.summary }
             id == "hr" -> s.lastDoseClient.liveHeartRate().let { (it != null) to (it?.let { b -> "$b BPM" } ?: "No live HR") }
             id == "last" -> {
                 val log = s.tapLogDao.getRecentLogs(1).first().firstOrNull() ?: return false to "Nothing to repeat"
-                s.actionExecutor.executeAndAwait(log.tagId).let { it.success to it.summary }
+                s.actionExecutor.executeAndAwait(log.tagId, debounce = false).let { it.success to it.summary }
             }
             else -> {
                 val p = PREFS.firstOrNull { it.id == id } ?: return false to "Unknown control"
@@ -378,9 +483,12 @@ object BandBridge {
 
     private fun sendState(nodeId: String) {
         scope.launch {
-            val all = catalogue()
+            val raw = catalogue()
             val controls = JSONArray()
-            order(all).mapNotNull { id -> all.firstOrNull { it.id == id } }.take(MAX_CONTROLS).forEach { c ->
+            val ids = order(raw)
+            val all = withDistinctIcons(raw, ids)
+            bandIds = ids.toSet()
+            ids.mapNotNull { id -> all.firstOrNull { it.id == id } }.take(MAX_CONTROLS).forEach { c ->
                 controls.put(
                     JSONObject().put("id", c.id).put("label", c.label.take(24)).put("icon", c.icon)
                         .put("kind", if (c.toggle) "toggle" else "action")
@@ -391,7 +499,7 @@ object BandBridge {
             send(
                 nodeId,
                 JSONObject().put("type", "state").put("remote", remoteActivity?.get() != null).put("hr", hr)
-                    .put("home", HOME_COUNT).put("controls", controls)
+                    .put("home", HOME_COUNT).put("controls", controls).put("look", lookJson())
             )
         }
     }

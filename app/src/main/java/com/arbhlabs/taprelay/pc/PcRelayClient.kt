@@ -31,6 +31,9 @@ class PcRelayClient(
     private val ownerId: String,
     private val protocol: Int = PcRelayProtocol.CURRENT_VERSION
 ) {
+    /** Set once a pre-HMAC PC helper has accepted the bearer fallback; cleared with this client on re-pair. */
+    @Volatile private var bearerOnly = false
+
     suspend fun pair(pairingCode: String): Result<PcRelayProtocol.PairResponse> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -63,18 +66,20 @@ class PcRelayClient(
                 )
                 var response = http.post("${baseUrl.trimEnd('/')}$path") {
                     contentType(ContentType.Application.Json)
-                    header("Authorization", hmacHeader("POST", path, body))
+                    header("Authorization", if (bearerOnly) "Bearer $token" else hmacHeader("POST", path, body))
                     setBody(body)
                 }
                 // Existing PC helpers understand the original bearer token only. A freshly
                 // upgraded helper accepts the signed request above; retrying just a 401 keeps
-                // a phone update from severing a working, already-paired PC.
-                if (response.status.value == 401) {
+                // a phone update from severing a working, already-paired PC. Once that fallback
+                // has worked it is used straight away, so every press is one request, not two.
+                if (response.status.value == 401 && !bearerOnly) {
                     response = http.post("${baseUrl.trimEnd('/')}$path") {
                         contentType(ContentType.Application.Json)
                         header("Authorization", "Bearer $token")
                         setBody(body)
                     }
+                    if (response.status.value in 200..299) bearerOnly = true
                 }
                 val result = response.body<PcRelayProtocol.ActionResponse>()
                 if (result.protocol != protocol) {

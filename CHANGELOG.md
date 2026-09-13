@@ -8,6 +8,16 @@
   Choose tiles, order and icons in AOD settings → watch icon. A quiet "Band link" notification keeps
   the band working while TapRelay is closed.
 
+- Band look (band app 1.5.0): Grid / Compact / List layouts, 8 accent colours, heart rate large /
+  small / off, names on tiles, keep-screen-on and buzz switches, with a live miniature of the band.
+- Band tile icons are picked from each item's name (vent, corner, desk, ceiling, strip, TV, fan…) and
+  never repeat within a family, so similar lamps are told apart at a glance.
+
+### Changed
+- Volume up/down and next/previous track (Windows and phone) repeat on every press, on every
+  surface - no more 1.5 s wait between presses. Band taps no longer wait for the previous one.
+- A Windows helper that only accepts the older sign-in now gets one request per press, not two.
+
 ### Fixed
 - TapRelay no longer crashes on launch while Notify for Xiaomi is restarting; the band link
   reconnects by itself once Notify is back.

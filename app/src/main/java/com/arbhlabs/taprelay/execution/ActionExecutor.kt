@@ -101,6 +101,24 @@ class ActionExecutor(
     private val lastFired = HashMap<String, Long>()
     private val inFlight = HashSet<String>()
 
+    /**
+     * Items that are a nudge rather than a state change - volume up/down, next/previous track.
+     * Five presses mean five steps, so these skip the duplicate-scan debounce and the one-run-at-a-
+     * time rule. Learned from the tag on its first run.
+     */
+    private val nudges = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private fun isNudge(tag: TagEntity): Boolean = when {
+        tag.isPcRelay -> tag.deviceId in setOf(
+            PcRelayAction.MEDIA_VOLUME_UP, PcRelayAction.MEDIA_VOLUME_DOWN, PcRelayAction.MEDIA_NEXT, PcRelayAction.MEDIA_PREVIOUS
+        )
+        tag.isPhone -> tag.deviceId in setOf(
+            com.arbhlabs.taprelay.domain.model.PhoneAction.VOLUME_UP, com.arbhlabs.taprelay.domain.model.PhoneAction.VOLUME_DOWN,
+            com.arbhlabs.taprelay.domain.model.PhoneAction.MEDIA_NEXT, com.arbhlabs.taprelay.domain.model.PhoneAction.MEDIA_PREVIOUS
+        )
+        else -> false
+    }
+
     private val _running = MutableStateFlow<Set<String>>(emptySet())
 
     /**
@@ -146,7 +164,7 @@ class ActionExecutor(
         val now = System.currentTimeMillis()
         synchronized(lastFired) {
             val prev = lastFired[tagId]
-            if (prev != null && now - prev < debounceMs) return
+            if (tagId !in nudges && prev != null && now - prev < debounceMs) return
             lastFired[tagId] = now
         }
         scope.launch { run(tagId, onFeedback, hapticContext = hapticContext) }
@@ -160,12 +178,15 @@ class ActionExecutor(
     /**
      * Runs an item and waits for the outcome. Used where the caller has to stay alive until the
      * action is done - a widget's `goAsync()` receiver, most of all.
+     *
+     * @param debounce false for a deliberate on-screen press (the wrist remote): the scan debounce is
+     *   for NFC re-reads, and the single-flight rule still stops a double run of the same item.
      */
-    suspend fun executeAndAwait(tagId: String, onFeedback: (TapFeedback) -> Unit = {}): TapOutcome {
+    suspend fun executeAndAwait(tagId: String, debounce: Boolean = true, onFeedback: (TapFeedback) -> Unit = {}): TapOutcome {
         val now = System.currentTimeMillis()
         synchronized(lastFired) {
             val prev = lastFired[tagId]
-            if (prev != null && now - prev < debounceMs) {
+            if (debounce && tagId !in nudges && prev != null && now - prev < debounceMs) {
                 return TapOutcome(success = false, summary = "Already running")
             }
             lastFired[tagId] = now
@@ -198,7 +219,9 @@ class ActionExecutor(
         // One item, one run at a time. A repeated controller pull, a re-scan or a second widget tap
         // while a sequence is still working is the same intent expressed twice, not a request to
         // run it twice.
-        if (!claim(tagId)) {
+        val nudge = isNudge(rawTag)
+        if (nudge) nudges.add(tagId) else nudges.remove(tagId)
+        if (!nudge && !claim(tagId)) {
             return TapOutcome(success = false, summary = "${rawTag.friendlyName} is already running.")
         }
         val outcome = try {
@@ -212,7 +235,7 @@ class ActionExecutor(
                 else -> runDevice(rawTag, startTime, silent, onFeedback)
             }
         } finally {
-            release(tagId)
+            if (!nudge) release(tagId)
         }
         if (!silent) {
             if (hapticContext != null) hapticSignatures?.play(rawTag, outcome, hapticContext)
