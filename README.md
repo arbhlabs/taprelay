@@ -11,11 +11,13 @@ straight from the site: **[arbhlabs.com/taprelay/](https://arbhlabs.com/taprelay
 
 | | |
 |---|---|
-| Current version | **0.3.0** (build 18) |
+| Current version | **0.6.32** (build 68) |
+| Band app | **1.16.10** for Xiaomi Smart Band 9 |
+| Windows helper | **PC Relay 1.0.2**, Windows x64 |
 | Requires | Android 11+ (API 30) |
 | Package | `com.arbhlabs.taprelay` |
-| Size | 7,982,103 bytes |
-| SHA-256 | `64439c2db905d0e6aaa14a4c2056d3ff4c07470b9fdbe16171dcfe614771c8ff` |
+| Size | 9,150,873 bytes |
+| SHA-256 | `c3c0318c1edcfb11842b52676364741aa09c1a1ebe818ebd1119572416978574` |
 
 ## What it does
 
@@ -25,12 +27,14 @@ straight from the site: **[arbhlabs.com/taprelay/](https://arbhlabs.com/taprelay
 - **Widgets, a quick-settings tile and an always-on face** for the same actions.
 - **The tag holds only an anonymous code.** Device IDs and API keys stay in the phone's KeyStore.
 
+- **Mouse mode** turns your phone or Xiaomi Smart Band 9 into a touchpad for your paired Windows PC: move, click and scroll. Update PC Relay to 1.0.2, then open **Windows PC → Mouse control** on your phone.
+
 ## About this repository
 
 **TapRelay is closed source.** This repository is not the source code — it hosts the signed release
 binaries, the changelog and the issue tracker, so that the app has a verifiable home on a domain
 people already trust and so tools like [Obtainium](https://github.com/ImranR98/Obtainium) can track
-updates.
+updates. Release tags identify distribution metadata; [the release manifest](releases/v0.6.32.json) records the exact separate application source checkpoints and artifact hashes.
 
 If that is a dealbreaker for you, that is a completely reasonable position and there are good
 open-source alternatives in this space. This is stated plainly here rather than left for you to
@@ -38,14 +42,14 @@ work out.
 
 ## Verifying what you downloaded
 
-Every release is signed with the same key. Check the APK before installing:
+The Android APK and Band RPK use the same existing signing key. Check the APK before installing:
 
 ```bash
 # the file matches what was published
-sha256sum TapRelay-0.3.0.apk
+sha256sum TapRelay-0.6.32.apk
 
 # and it was signed by us
-apksigner verify --print-certs TapRelay-0.3.0.apk
+apksigner verify --print-certs TapRelay-0.6.32.apk
 ```
 
 Expected signer:
@@ -71,9 +75,7 @@ version, device model, and the app version from the About screen.
 
 ## Notes
 
-**Govee, Smart Life and Sensibo control is free, permanently, in every tier.** Their developer APIs are licensed for personal, non-commercial use, so nothing that reaches a vendor cloud sits behind the paywall.
-
-**TapRelay Pro (€7.99 once)** unlocks the two things that do not: Home Assistant targets and raw web actions. A 7-day trial runs on device with no card and no account.
+**Every TapRelay feature is free**, including Home Assistant targets and web actions. No subscription, licence key or trial is needed.
 
 Not affiliated with Govee, Tuya, Sensibo or Google.
 
