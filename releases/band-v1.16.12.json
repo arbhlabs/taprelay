@@ -1,0 +1,49 @@
+{
+  "release": "band-v1.16.12",
+  "releaseDate": "2026-09-20",
+  "distributionRepository": "https://github.com/arbhlabs/taprelay",
+  "tagMeaning": "Distribution metadata only. Band source is maintained separately; exact source checkpoint is recorded below.",
+  "replacesRecommendedBandVersion": "1.16.10",
+  "compatibleRelease": "https://github.com/arbhlabs/taprelay/releases/tag/v0.6.32",
+  "signingCertificateSha256": "7ed03578928d3b8eaec35cf064154bee4d48f528b0021dd3dcd9f3fde73ba808",
+  "artifacts": [
+    {
+      "component": "Xiaomi Smart Band 9",
+      "version": "1.16.12",
+      "versionCode": 86,
+      "filename": "TapRelay-Band9-1.16.12.rpk",
+      "sizeBytes": 1837836,
+      "sha256": "a7fa317438e25646803ae935291a4e2ed2a2de0e751f8c9b1241a501c7e2cbc7",
+      "sourceCommit": "5eabeeb467173e1ab161f5b57202c7f72ba6013b"
+    }
+  ],
+  "compatibleArtifacts": [
+    {
+      "component": "Android",
+      "version": "0.6.32",
+      "versionCode": 68,
+      "filename": "TapRelay-0.6.32.apk",
+      "sizeBytes": 9150873,
+      "sha256": "c3c0318c1edcfb11842b52676364741aa09c1a1ebe818ebd1119572416978574",
+      "sourceCommit": "4aa8eee0d70dec6c4d366a8ca587aa4f7dff80db",
+      "downloadUrl": "https://github.com/arbhlabs/taprelay/releases/download/v0.6.32/TapRelay-0.6.32.apk"
+    },
+    {
+      "component": "Windows PC Relay",
+      "version": "1.0.2",
+      "filename": "TapRelay-PC-Relay-1.0.2.exe",
+      "sizeBytes": 50351322,
+      "sha256": "48f7d1214f7cd51eae54d9c35484154d24fd2dc27969bfb7345262790e178d85",
+      "sourceBaseline": "d9a0c964a4587b03f1e34a23f08ed52147edf967",
+      "mousePatchCommit": "0e546f65b29424dfa6dec4b127da8c7b5f4a61e8",
+      "informationalVersion": "1.0.2+base.d9a0c964.mouse.0e546f6",
+      "sourceArchiveSha256": "2959279f4000509d6913f1e7222236223d3d0ec8634d26f01555b9817ca01c19",
+      "downloadUrl": "https://github.com/arbhlabs/taprelay/releases/download/v0.6.32/TapRelay-PC-Relay-1.0.2.exe"
+    }
+  ],
+  "automatedVerification": {
+    "postBuildTestsPassed": 56,
+    "postBuildTestsFailed": 0,
+    "mouseTestCases": 34
+  }
+}

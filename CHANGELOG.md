@@ -6,6 +6,20 @@ All published releases of TapRelay. Binaries are attached to each
 
 Published artifacts are immutable: a version already released is never rebuilt or replaced.
 
+## Band 1.16.12 — 2026-09-20
+
+TapRelay Band 1.16.12 (build 86) makes mouse mode easier to use on the small screen.
+
+- Swipe slowly for precise movement, or quickly to move farther.
+- Tap to click; Left, Right and Scroll stay within reach.
+- No extra settings. The accepted layout is unchanged.
+
+This is a Band-only update. Keep [TapRelay 0.6.32 for Android](https://github.com/arbhlabs/taprelay/releases/download/v0.6.32/TapRelay-0.6.32.apk) and [Windows PC Relay 1.0.2](https://github.com/arbhlabs/taprelay/releases/download/v0.6.32/TapRelay-PC-Relay-1.0.2.exe); no phone or PC rebuild is needed. Your existing pairing stays in place.
+
+Install the RPK through Notify for Xiaomi. Compare its SHA-256 with SHA256SUMS.txt. The original [v0.6.32 release](https://github.com/arbhlabs/taprelay/releases/tag/v0.6.32), including Band 1.16.10, remains available unchanged.
+
+This tag identifies distribution metadata. `release-manifest.json` records the exact Band source checkpoint, file hash and compatible phone/PC artifacts.
+
 ## 0.6.32 — 2026-09-20
 
 TapRelay 0.6.32 (build 68), Xiaomi Smart Band 9 app 1.16.10 (build 84), and Windows PC Relay 1.0.2.

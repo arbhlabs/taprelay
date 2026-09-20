@@ -12,7 +12,7 @@ straight from the site: **[arbhlabs.com/taprelay/](https://arbhlabs.com/taprelay
 | | |
 |---|---|
 | Current version | **0.6.32** (build 68) |
-| Band app | **1.16.10** for Xiaomi Smart Band 9 |
+| Band app | **[1.16.12](../../releases/tag/band-v1.16.12)** for Xiaomi Smart Band 9 |
 | Windows helper | **PC Relay 1.0.2**, Windows x64 |
 | Requires | Android 11+ (API 30) |
 | Package | `com.arbhlabs.taprelay` |
@@ -28,6 +28,8 @@ straight from the site: **[arbhlabs.com/taprelay/](https://arbhlabs.com/taprelay
 - **The tag holds only an anonymous code.** Device IDs and API keys stay in the phone's KeyStore.
 
 - **Mouse mode** turns your phone or Xiaomi Smart Band 9 into a touchpad for your paired Windows PC: move, click and scroll. Update PC Relay to 1.0.2, then open **Windows PC → Mouse control** on your phone.
+
+Band mouse mode: swipe slowly for precision or quickly to move farther. Tap to click, or use Left, Right and Scroll. The [Band follow-up manifest](releases/band-v1.16.12.json) records the current RPK; the original phone release manifest stays unchanged.
 
 ## About this repository
 
